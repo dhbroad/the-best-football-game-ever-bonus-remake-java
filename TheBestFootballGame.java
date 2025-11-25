@@ -21,7 +21,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     // 2 EndzoneL + 40 Field + 2 EndzoneR = 44 total grid units
     private static final int GRID_W = 44; 
     private static final int FIELD_START_X = 2; // Index where the green field starts (Goal Line)
-    private static final int FIELD_END_X = GRID_W - 2; // Index where player starts (42)
+    private static final int FIELD_END_X = GRID_W - 2; // Index where the green field ends (42)
     
     private static final int SCOREBOARD_W = (int)(2.5 * TILE_SIZE);
     private static final int WINDOW_W = (VIEW_W * TILE_SIZE) + SCOREBOARD_W;
@@ -31,7 +31,8 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     private static final int TURN_DELAY = 500; 
     private static final int START_ATTEMPTS = 4;
     private static final int GAME_DURATION = 60; 
-    private static final Color FIELD_COLOR = new Color(0, 180, 0); 
+    // Requested grass color: RGB 3, 214, 73 (#03D649)
+    private static final Color FIELD_COLOR = new Color(3, 214, 73); 
 
     // --- State Management ---
     private enum GameState { MENU, READY, PLAYING, TOUCHDOWN, TACKLED, GAMEOVER }
@@ -69,7 +70,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     private BufferedImage imgRefRight;
     private BufferedImage imgEndzoneRight, imgEndzoneLeft; 
     private BufferedImage imgTouchdown, imgScoreboard;
-    private BufferedImage imgGrassTexture;
+    private BufferedImage imgGrassTexture; // Now holds the repeating pattern
     
     // --- Sounds ---
     private Clip clipCheer, clipSeal, clipWhistle, clipStep, clipThud;
@@ -98,9 +99,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // Touchdown Blink Timer (0.625s ON/OFF cycle)
         tdBlinkTimer = new Timer(625, e -> {
             tdBlinkCount++;
-            showTDSprite = (tdBlinkCount % 2 != 0); // ON for odd, OFF for even
+            showTDSprite = (tdBlinkCount % 2 != 0); 
 
-            if (tdBlinkCount >= 8) { // 4 cycles complete (4 ON, 4 OFF)
+            if (tdBlinkCount >= 8) { 
                 tdBlinkTimer.stop();
                 resetPlaySequence();
             }
@@ -130,18 +131,46 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             System.out.println("Error loading images: " + e.getMessage());
         }
     }
+    
+    private BufferedImage flipImageHorizontally(BufferedImage src) {
+        if (src == null) return null;
+        AffineTransform tx = AffineTransform.getScaleInstance(-1, 1);
+        tx.translate(-src.getWidth(null), 0);
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        return op.filter(src, null);
+    }
 
     private void generateGrassTexture() {
-        imgGrassTexture = new BufferedImage(WINDOW_W - SCOREBOARD_W, WINDOW_H, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = imgGrassTexture.createGraphics();
+        // Create a texture pattern for one TILE_SIZE * TILE_SIZE block
+        BufferedImage tileTexture = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = tileTexture.createGraphics();
         g.setColor(FIELD_COLOR);
-        g.fillRect(0, 0, imgGrassTexture.getWidth(), imgGrassTexture.getHeight());
+        g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+        
+        // Darker smudge pattern (RGB 0, 150, 0, or similar dark green)
+        Color darkSmudge = new Color(0, 150, 0, 80); 
         Random r = new Random();
-        for(int i=0; i<10000; i++) {
-            g.setColor(new Color(0, r.nextInt(50)+150, 0, 50));
-            g.fillRect(r.nextInt(imgGrassTexture.getWidth()), r.nextInt(imgGrassTexture.getHeight()), 2, 2);
+        
+        // Apply random smudges for texture
+        for(int i=0; i<30; i++) {
+            g.setColor(darkSmudge);
+            // Draw random small ovals/rects to simulate smudges
+            int w = r.nextInt(TILE_SIZE/4) + 5;
+            int h = r.nextInt(TILE_SIZE/4) + 5;
+            g.fillOval(r.nextInt(TILE_SIZE - w), r.nextInt(TILE_SIZE - h), w, h);
         }
         g.dispose();
+
+        // Create the full texture image by tiling the pattern
+        imgGrassTexture = new BufferedImage(VIEW_W * TILE_SIZE, WINDOW_H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D fullG = imgGrassTexture.createGraphics();
+        
+        for (int x = 0; x < VIEW_W; x++) {
+            for (int y = 0; y < VIEW_H; y++) {
+                fullG.drawImage(tileTexture, x * TILE_SIZE, y * TILE_SIZE, null);
+            }
+        }
+        fullG.dispose();
     }
     
     private BufferedImage loadImage(String name) {
@@ -155,13 +184,13 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         g.setColor(Color.MAGENTA); g.fillRect(0,0,TILE_SIZE, TILE_SIZE);
         g.dispose(); return img;
     }
-    
-    private BufferedImage flipImageHorizontally(BufferedImage src) {
-        if (src == null) return null;
-        AffineTransform tx = AffineTransform.getScaleInstance(-1, 1);
-        tx.translate(-src.getWidth(null), 0);
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        return op.filter(src, null);
+
+    private void loadSounds() {
+        clipCheer = loadClip("cheer.wav");
+        clipSeal = loadClip("seal.wav");
+        clipWhistle = loadClip("whistle.wav");
+        clipStep = loadClip("step.wav");
+        clipThud = loadClip("thud.wav");
     }
 
     private Clip loadClip(String filename) {
@@ -192,8 +221,11 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void prepareField() {
-        cameraX = GRID_W - VIEW_W; 
+        // Player starts at index 42 (FIELD_END_X), the first green tile next to the right EZ.
         player = new Player(FIELD_END_X, 3); 
+        // Camera starts locked to the right side of the field
+        cameraX = GRID_W - VIEW_W; 
+        
         spawnDefendersAndRefs();
         
         gameClock.stop();
@@ -273,7 +305,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
 
             int dx = 0, dy = 0;
 
-            // Aggressive Tackle Check: Is player adjacent? (80% chance to move onto player)
             if (Math.abs(d.x - player.x) + Math.abs(d.y - player.y) == 1) {
                 if (rand.nextDouble() < 0.8) {
                     dx = player.x - d.x;
@@ -281,7 +312,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
                 }
             }
 
-            // Random move or stay
             if (dx == 0 && dy == 0) {
                 if (rand.nextDouble() < 0.6) continue;
                 if (rand.nextBoolean()) dx = rand.nextBoolean() ? 1 : -1;
@@ -372,7 +402,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             int by = ty + dy;
             
             boolean blockerBehind = false;
-            // Check for defender in the space immediately proceeding (bx, by)
             for (Defender d : defenders) {
                  if (!d.isKnockedDown && d.x == bx && d.y == by) {
                      blockerBehind = true;
@@ -381,14 +410,11 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             }
 
             if (blockerBehind) {
-                // Double-team tackle condition
                 playerTackled();
                 return;
             } else if (bx < 0 || bx >= GRID_W || by < 0 || by >= VIEW_H) {
-                 // Blocked by boundary
                  return;
             } else {
-                // Successful Knockdown
                 targetDef.isKnockedDown = true;
                 score++; 
                 playSound(clipThud);
@@ -401,7 +427,8 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         playSound(clipStep);
         updateCamera();
 
-        if (player.x <= 1) scoreTouchdown();
+        // Touchdown condition: Reached index 1 (Goal Line)
+        if (player.x < FIELD_START_X) scoreTouchdown();
         repaint();
     }
     
@@ -434,10 +461,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         defenderTimer.stop(); gameClock.stop();
         
         tdBlinkCount = 0;
-        showTDSprite = true; // 1st display is immediate
+        showTDSprite = true;
         tdBlinkTimer.start();
         
-        // No 5000ms pause timer here; the reset is handled by tdBlinkTimer count
         repaint();
     }
 
@@ -466,9 +492,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         g.setColor(new Color(144, 238, 144)); g.fillRect(0, 0, WINDOW_W, WINDOW_H);
         
         g.setColor(FIELD_COLOR); 
-        int boxW = 400; int boxH = 100;
-        int circleSize = 150;
-        g.fillOval(WINDOW_W/2 - circleSize/2, WINDOW_H/2 - circleSize/2, circleSize, circleSize); // Circle
+        // Increased circle size (180)
+        int circleSize = 180;
+        g.fillOval(WINDOW_W/2 - circleSize/2, WINDOW_H/2 - circleSize/2, circleSize, circleSize);
         
         g.setColor(Color.WHITE); g.setFont(new Font("Arial", Font.BOLD, 18));
         String msg = "Click here to start!";
@@ -477,7 +503,10 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void drawField(Graphics g) {
-        g.drawImage(imgGrassTexture, 0, 0, null);
+        // Draw Grass Texture (Tiled background)
+        if (imgGrassTexture != null) {
+            g.drawImage(imgGrassTexture, 0, 0, null);
+        }
         
         // Midfield Logo (Starts at grid index 20, 4 wide)
         int logoGridX = 20; 
@@ -490,33 +519,41 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             int gridX = cameraX + i;
             int drawX = i * TILE_SIZE;
             
-            if (gridX >= FIELD_START_X && gridX <= FIELD_END_X) {
+            // Yard lines for the green field area (Indices 2 through 41)
+            if (gridX >= FIELD_START_X && gridX <= FIELD_END_X - 1) {
                 g.setColor(new Color(255, 255, 255, 100));
                 g.drawLine(drawX, 0, drawX, WINDOW_H);
             }
             
-            if (gridX < FIELD_START_X) { 
+            // Endzones (Left: 0-1, Right: 42-43)
+            if (gridX < FIELD_START_X) { // Left Endzone (Indices 0, 1)
+                // sliceIndex is the gridX value (0 or 1)
                 drawEndzoneSlice(g, imgEndzoneLeft, gridX, drawX, Color.BLUE);
             }
-            if (gridX > FIELD_END_X) { 
-                drawEndzoneSlice(g, imgEndzoneRight, gridX - (FIELD_END_X + 1), drawX, Color.RED);
+            if (gridX >= FIELD_END_X) { // Right Endzone (Indices 42, 43)
+                // sliceIndex is gridX - FIELD_END_X (0 or 1)
+                drawEndzoneSlice(g, imgEndzoneRight, gridX - FIELD_END_X, drawX, Color.RED);
             }
         }
     }
     
     private void drawEndzoneSlice(Graphics g, BufferedImage img, int sliceIndex, int drawX, Color fallback) {
-        // sliceIndex is 0 for the first EZ tile, 1 for the second.
-        if (img != null) {
-            int totalSlices = img.getWidth() / (TILE_SIZE / 2); // Assumes EZ image is 2 tiles wide (4 slices)
-            int slicesPerTile = 2;
-            int srcX1 = (sliceIndex * slicesPerTile * TILE_SIZE) / slicesPerTile;
-            int srcX2 = srcX1 + (TILE_SIZE * slicesPerTile) / slicesPerTile;
-
-            g.drawImage(img, drawX, 0, drawX + TILE_SIZE, WINDOW_H, 
-                        srcX1, 0, srcX2, img.getHeight(), null);
-        } else {
+        if (img == null) { 
             g.setColor(fallback); g.fillRect(drawX, 0, TILE_SIZE, WINDOW_H);
+            return;
         }
+
+        // The Endzone image covers 2 tiles (2 * TILE_SIZE width).
+        // Each tile is 1/2 of the total image width.
+        int srcWidth = img.getWidth() / 2;
+        int srcX1 = sliceIndex * srcWidth;
+        int srcX2 = srcX1 + srcWidth;
+
+        // Draw the specific slice onto the drawX screen position
+        g.drawImage(img, 
+            drawX, 0, drawX + TILE_SIZE, WINDOW_H, // Destination rectangle (1 tile width)
+            srcX1, 0, srcX2, img.getHeight(),      // Source rectangle (1 tile width slice)
+            null);
     }
 
     private void drawSidelines(Graphics g) {
@@ -557,10 +594,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         int w = imgTouchdown.getWidth() / 2;
         int h = imgTouchdown.getHeight() / 2;
         
-        // Left edge of sprite must be 1 pixel from right edge of left endzone.
-        // Right edge of left endzone (grid index 1) is at screen X = 2 * TILE_SIZE = 96.
+        // Left edge of sprite must be 1 pixel from right edge of left endzone (grid index 2).
         int drawX = (FIELD_START_X * TILE_SIZE) + 1; 
-        int drawY = WINDOW_H/2 - h/2; // Center vertically on the view window
+        int drawY = WINDOW_H/2 - h/2;
         
         g.drawImage(imgTouchdown, drawX, drawY, w, h, null);
     }
@@ -575,16 +611,16 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // Time Left - Slightly Down (75)
         drawCenteredText(g, String.valueOf(timeRemaining), x + SCOREBOARD_W/2, 75);
         
-        // Score - Slightly Down (140)
-        drawCenteredText(g, String.valueOf(score), x + SCOREBOARD_W/2, 140);
+        // Score - Shifted UP 2 pixels (140 -> 138)
+        drawCenteredText(g, String.valueOf(score), x + SCOREBOARD_W/2, 138);
         
         // Yards to go: Distance from goal line (FIELD_START_X = 2) * 2.5
         double yards = Math.max(0, (player.x - FIELD_START_X) * 2.5);
         // Up slightly more (220)
         drawCenteredText(g, df.format(yards), x + SCOREBOARD_W/2, 220);
         
-        // Attempts Left - More than slightly Up (300)
-        drawCenteredText(g, String.valueOf(attempts), x + SCOREBOARD_W/2, 300);
+        // Attempts Left - Down slightly (300 -> 305)
+        drawCenteredText(g, String.valueOf(attempts), x + SCOREBOARD_W/2, 305);
     }
     
     private void drawCenteredText(Graphics g, String text, int x, int y) {
