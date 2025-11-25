@@ -26,7 +26,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     
     private static final int SCOREBOARD_W = (int)(2.5 * TILE_SIZE);
     private static final int WINDOW_W = (VIEW_W * TILE_SIZE) + SCOREBOARD_W;
-    // Window Height is based only on VIEW_H (7 rows) - Sidelines are thin lines drawn on top/bottom
     private static final int WINDOW_H = VIEW_H * TILE_SIZE;
 
     // --- Game Constants ---
@@ -80,7 +79,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
 
     public TheBestFootballGame() {
         setPreferredSize(new Dimension(WINDOW_W, WINDOW_H));
-        // Background color will be immediately covered by field/endzones
         setBackground(FIELD_COLOR); 
         setFocusable(true);
         addKeyListener(this);
@@ -136,7 +134,8 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         int darkG = Math.max(0, FIELD_COLOR.getGreen() - 5);
         int darkB = Math.max(0, FIELD_COLOR.getBlue() - 5);
         
-        Color darkerGreen = new Color(darkR, darkG, darkB, 80); 
+        // Increased opacity for better visibility (Change #3)
+        Color darkerGreen = new Color(darkR, darkG, darkB, 120); 
         Random r = new Random();
         
         // Apply subtle noise/smudges for texture
@@ -152,7 +151,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         g.dispose();
 
         // Create the full texture image by tiling the pattern
-        // Height is now just VIEW_H * TILE_SIZE
         imgGrassTexture = new BufferedImage(VIEW_W * TILE_SIZE, WINDOW_H, BufferedImage.TYPE_INT_ARGB);
         Graphics2D fullG = imgGrassTexture.createGraphics();
         
@@ -195,7 +193,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             System.out.println("Error loading images: " + e.getMessage());
         }
     }
-    // ... (Sound methods loadClip, playSound) ... 
+    
     private void loadSounds() {
         clipCheer = loadClip("cheer.wav");
         clipSeal = loadClip("seal.wav");
@@ -234,10 +232,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void prepareField() {
-        // Player starts at index 42 (FIELD_END_X), the first green tile next to the right EZ.
-        // Player starts in the middle playable row (3)
         player = new Player(FIELD_END_X, VIEW_H / 2); 
-        // Camera starts locked to the right side of the field
         cameraX = GRID_W - VIEW_W; 
         
         spawnDefendersAndRefs();
@@ -253,8 +248,10 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         prepareField();
         gameState = GameState.READY;
         playSound(clipCheer);
-        Timer sealDelay = new Timer(1000, e -> playSound(clipSeal));
-        sealDelay.setRepeats(false); sealDelay.start();
+        // Change #1: Seal sound delay set to 750ms
+        Timer sealDelay = new Timer(750, e -> playSound(clipSeal));
+        sealDelay.setRepeats(false); 
+        sealDelay.start();
         startPlayAfterDelay(3000);
     }
     
@@ -306,7 +303,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             do {
                 rx = minSpawnX + rand.nextInt(maxSpawnX - minSpawnX); 
                 ry = rand.nextInt(VIEW_H);
-            } while (isOccupied(rx, ry));
+            } while (isOccupied(rx, ry)); // Change #2: Check if occupied by any entity
             referees.add(new Referee(rx, ry));
         }
     }
@@ -329,13 +326,11 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             if (d.isKnockedDown) continue;
 
             int dx = 0, dy = 0;
-
-            // REMOVED LOGIC: Defenders no longer prioritize moving toward an adjacent player. 
-            // They rely on random movement and the collision/tackle check below.
             
-            // Random movement (Change #2: Removed priority move towards player)
-            if (rand.nextDouble() < 0.6) continue; // 60% chance to skip movement
+            // 60% chance to skip movement
+            if (rand.nextDouble() < 0.6) continue; 
             
+            // Random movement
             if (rand.nextBoolean()) dx = rand.nextBoolean() ? 1 : -1;
             else dy = rand.nextBoolean() ? 1 : -1;
 
@@ -353,7 +348,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
                 return;
             }
 
-            // Move if the target square is not occupied by another entity
+            // Move if the target square is not occupied by another entity (Change #2)
             if (!isOccupied(tx, ty)) {
                 d.x = tx;
                 d.y = ty;
@@ -363,6 +358,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // ------------------ REFEREE MOVEMENT ------------------
         Random refRand = new Random();
         for (Referee r : referees) {
+            // 70% chance to skip movement
             if (refRand.nextDouble() < 0.7) continue; 
             
             int rx = (refRand.nextBoolean()) ? (refRand.nextBoolean() ? 1 : -1) : 0;
@@ -375,15 +371,8 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             // Check boundaries (prevent moving into outer endzone columns 0 or 43, or sidelines)
             if (tx <= 0 || tx >= GRID_W - 1 || ty < 0 || ty >= VIEW_H) continue;
             
-            // Move only if the target square is not occupied by another referee
-            boolean refOccupied = false;
-            for(Referee otherR : referees) {
-                if(otherR != r && otherR.x == tx && otherR.y == ty) {
-                    refOccupied = true;
-                    break;
-                }
-            }
-            if (!refOccupied) {
+            // Move only if the target square is not occupied by any other entity (Change #2)
+            if (!isOccupied(tx, ty)) {
                 r.x = tx; 
                 r.y = ty;
             }
@@ -528,9 +517,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         super.paintComponent(g);
         if (gameState == GameState.MENU) { drawStartScreen(g); return; }
         
-        // Draw the field and sidelines
+        // Draw the field and thin sidelines
         drawField(g);
-        drawSidelines(g); // Draw thin sidelines
+        drawSidelines(g);
         
         drawEntities(g);
         drawScoreboard(g);
@@ -582,8 +571,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             
             // Yard lines for the green field area (Indices 2 through 41)
             if (gridX >= FIELD_START_X && gridX <= FIELD_END_X - 1) {
-                g.setColor(new Color(255, 255, 255, 100));
-                g.drawLine(drawX, 0, drawX, WINDOW_H);
+                // Change #4: Set color to white and draw a 2-pixel thick line
+                g.setColor(new Color(255, 255, 255, 100)); 
+                g.fillRect(drawX, 0, 2, WINDOW_H);
             }
             
             // Endzones (Left: 0-1, Right: 42-43)
@@ -597,7 +587,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
     
     private void drawEndzoneSlice(Graphics g, BufferedImage img, int sliceIndex, int drawX, Color fallback) {
-        int drawY = 0; // No vertical offset needed
+        int drawY = 0; 
         int sliceHeight = WINDOW_H;
 
         if (img == null) { 
@@ -616,15 +606,15 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void drawSidelines(Graphics g) {
-        // Drawing thin 3-pixel sidelines (Change #1: thickness fix)
-        g.setColor(Color.WHITE);
+        // Using the SIDELINE_COLOR constant for clean code (Fix from previous step)
+        g.setColor(SIDELINE_COLOR);
         g.fillRect(0, 0, VIEW_W * TILE_SIZE, 3);
         g.fillRect(0, WINDOW_H - 3, VIEW_W * TILE_SIZE, 3);
     }
 
     private void drawEntities(Graphics g) {
         int offX = -cameraX * TILE_SIZE;
-        int offY = 0; // Removed vertical offset
+        int offY = 0; 
         
         for (Defender d : defenders) if (d.isKnockedDown) drawSprite(g, imgDefenderKnocked, d.x, d.y, offX, offY, false);
 
