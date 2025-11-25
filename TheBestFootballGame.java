@@ -147,17 +147,19 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         g.setColor(FIELD_COLOR);
         g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
         
-        // Darker smudge pattern (RGB 0, 150, 0, or similar dark green)
-        Color darkSmudge = new Color(0, 150, 0, 80); 
+        // Darker green for smudges (subtle noise)
+        Color darkerGreen = new Color(FIELD_COLOR.getRed() - 5, FIELD_COLOR.getGreen() - 5, FIELD_COLOR.getBlue() - 5, 80); 
         Random r = new Random();
         
-        // Apply random smudges for texture
-        for(int i=0; i<30; i++) {
-            g.setColor(darkSmudge);
-            // Draw random small ovals/rects to simulate smudges
-            int w = r.nextInt(TILE_SIZE/4) + 5;
-            int h = r.nextInt(TILE_SIZE/4) + 5;
-            g.fillOval(r.nextInt(TILE_SIZE - w), r.nextInt(TILE_SIZE - h), w, h);
+        // Apply subtle noise/smudges for texture
+        for(int x = 0; x < TILE_SIZE; x+=2) { // Iterate with steps for sparse smudges
+            for(int y = 0; y < TILE_SIZE; y+=2) {
+                if(r.nextDouble() < 0.2) { // 20% chance for a smudge
+                    g.setColor(darkerGreen);
+                    int smudgeSize = r.nextInt(3) + 1; // Small smudges 1-3 pixels
+                    g.fillRect(x, y, smudgeSize, smudgeSize);
+                }
+            }
         }
         g.dispose();
 
@@ -489,10 +491,12 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void drawStartScreen(Graphics g) {
-        g.setColor(new Color(144, 238, 144)); g.fillRect(0, 0, WINDOW_W, WINDOW_H);
+        // Darker start screen background
+        g.setColor(new Color(120, 200, 120)); 
+        g.fillRect(0, 0, WINDOW_W, WINDOW_H);
         
-        g.setColor(FIELD_COLOR); 
-        // Increased circle size (180)
+        // Darker green for the circle
+        g.setColor(new Color(2, 180, 60)); 
         int circleSize = 180;
         g.fillOval(WINDOW_W/2 - circleSize/2, WINDOW_H/2 - circleSize/2, circleSize, circleSize);
         
@@ -511,8 +515,15 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // Midfield Logo (Starts at grid index 20, 4 wide)
         int logoGridX = 20; 
         int logoDrawX = (logoGridX - cameraX) * TILE_SIZE;
-        if (logoDrawX + 4*TILE_SIZE > 0 && logoDrawX < VIEW_W*TILE_SIZE && imgMidfieldLogo != null) {
-             g.drawImage(imgMidfieldLogo, logoDrawX, TILE_SIZE, 4*TILE_SIZE, 4*TILE_SIZE, null);
+        // Vertically centered: (VIEW_H * TILE_SIZE / 2) - (logo height / 2)
+        // Logo is 4 tiles high (4 * TILE_SIZE)
+        int logoDrawY = (VIEW_H * TILE_SIZE / 2) - (4 * TILE_SIZE / 2);
+        
+        if (imgMidfieldLogo != null) {
+             // Ensure logo is drawn only if visible
+             if (logoDrawX + 4 * TILE_SIZE > 0 && logoDrawX < VIEW_W * TILE_SIZE) {
+                g.drawImage(imgMidfieldLogo, logoDrawX, logoDrawY, 4 * TILE_SIZE, 4 * TILE_SIZE, null);
+             }
         }
 
         for (int i = 0; i < VIEW_W; i++) {
@@ -527,11 +538,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             
             // Endzones (Left: 0-1, Right: 42-43)
             if (gridX < FIELD_START_X) { // Left Endzone (Indices 0, 1)
-                // sliceIndex is the gridX value (0 or 1)
                 drawEndzoneSlice(g, imgEndzoneLeft, gridX, drawX, Color.BLUE);
             }
             if (gridX >= FIELD_END_X) { // Right Endzone (Indices 42, 43)
-                // sliceIndex is gridX - FIELD_END_X (0 or 1)
                 drawEndzoneSlice(g, imgEndzoneRight, gridX - FIELD_END_X, drawX, Color.RED);
             }
         }
@@ -543,13 +552,12 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             return;
         }
 
-        // The Endzone image covers 2 tiles (2 * TILE_SIZE width).
-        // Each tile is 1/2 of the total image width.
-        int srcWidth = img.getWidth() / 2;
-        int srcX1 = sliceIndex * srcWidth;
-        int srcX2 = srcX1 + srcWidth;
+        // The Endzone image is assumed to be 2 tiles wide.
+        // Each tile takes up half of the full image width.
+        int srcWidthPerTile = img.getWidth() / 2; // This is the width of one tile in the source image
+        int srcX1 = sliceIndex * srcWidthPerTile; // Start X for the specific slice
+        int srcX2 = srcX1 + srcWidthPerTile;      // End X for the specific slice
 
-        // Draw the specific slice onto the drawX screen position
         g.drawImage(img, 
             drawX, 0, drawX + TILE_SIZE, WINDOW_H, // Destination rectangle (1 tile width)
             srcX1, 0, srcX2, img.getHeight(),      // Source rectangle (1 tile width slice)
@@ -619,7 +627,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // Up slightly more (220)
         drawCenteredText(g, df.format(yards), x + SCOREBOARD_W/2, 220);
         
-        // Attempts Left - Down slightly (300 -> 305)
+        // Attempts Left - Down slightly (305)
         drawCenteredText(g, String.valueOf(attempts), x + SCOREBOARD_W/2, 305);
     }
     
