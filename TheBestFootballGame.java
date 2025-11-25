@@ -39,6 +39,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     // --- State Management ---
     private enum GameState { MENU, READY, PLAYING, TOUCHDOWN, TACKLED, GAMEOVER }
     private GameState gameState = GameState.MENU;
+    
+    // FIX: Movement control flag (New)
+    private boolean keyIsPressed = false; 
 
     // --- Stats ---
     private int score = 0;
@@ -134,7 +137,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         int darkG = Math.max(0, FIELD_COLOR.getGreen() - 5);
         int darkB = Math.max(0, FIELD_COLOR.getBlue() - 5);
         
-        // Increased opacity for better visibility (Change #3)
+        // Opacity 120
         Color darkerGreen = new Color(darkR, darkG, darkB, 120); 
         Random r = new Random();
         
@@ -248,7 +251,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         prepareField();
         gameState = GameState.READY;
         playSound(clipCheer);
-        // Change #1: Seal sound delay set to 750ms
+        // Seal sound delay set to 750ms
         Timer sealDelay = new Timer(750, e -> playSound(clipSeal));
         sealDelay.setRepeats(false); 
         sealDelay.start();
@@ -303,7 +306,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             do {
                 rx = minSpawnX + rand.nextInt(maxSpawnX - minSpawnX); 
                 ry = rand.nextInt(VIEW_H);
-            } while (isOccupied(rx, ry)); // Change #2: Check if occupied by any entity
+            } while (isOccupied(rx, ry));
             referees.add(new Referee(rx, ry));
         }
     }
@@ -348,7 +351,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
                 return;
             }
 
-            // Move if the target square is not occupied by another entity (Change #2)
+            // Move if the target square is not occupied by another entity
             if (!isOccupied(tx, ty)) {
                 d.x = tx;
                 d.y = ty;
@@ -371,7 +374,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             // Check boundaries (prevent moving into outer endzone columns 0 or 43, or sidelines)
             if (tx <= 0 || tx >= GRID_W - 1 || ty < 0 || ty >= VIEW_H) continue;
             
-            // Move only if the target square is not occupied by any other entity (Change #2)
+            // Move only if the target square is not occupied by any other entity
             if (!isOccupied(tx, ty)) {
                 r.x = tx; 
                 r.y = ty;
@@ -386,7 +389,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         if (gameState == GameState.GAMEOVER && e.getKeyCode() == KeyEvent.VK_SPACE) {
             initGameSession(); startFirstGameSequence(); return;
         }
-        if (gameState != GameState.PLAYING) return;
+        if (gameState != GameState.PLAYING || keyIsPressed) return; // FIX: Only move if key is not currently held down
 
         int dx = 0, dy = 0;
         switch (e.getKeyCode()) {
@@ -395,13 +398,20 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             case KeyEvent.VK_LEFT: dx = -1; break;
             case KeyEvent.VK_RIGHT: dx = 1; break;
         }
-        if (dx != 0 || dy != 0) movePlayer(dx, dy);
+        if (dx != 0 || dy != 0) {
+            keyIsPressed = true; // Block further movement until key is released
+            movePlayer(dx, dy);
+        }
     }
 
     @Override
-    public void keyReleased(KeyEvent e) { /* Do nothing - enforces single-key press movement */ } 
+    public void keyReleased(KeyEvent e) { 
+        // FIX: Release the flag when the key is released
+        keyIsPressed = false;
+    } 
+    
     @Override
-    public void keyTyped(KeyEvent e) { /* Do nothing - enforces single-key press movement */ }
+    public void keyTyped(KeyEvent e) { /* Do nothing */ }
     
     public void mouseClicked(MouseEvent e) { if (gameState == GameState.MENU) startFirstGameSequence(); }
     public void mousePressed(MouseEvent e) {} public void mouseReleased(MouseEvent e) {}
@@ -544,11 +554,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void drawField(Graphics g) {
-        // Draw the field color and grass texture filling the VIEW_H area
-        g.setColor(FIELD_COLOR);
-        g.fillRect(0, 0, VIEW_W * TILE_SIZE, WINDOW_H);
-
-        // Draw Grass Texture
+        // FIX: Removed the solid FIELD_COLOR fill here. The grass texture (which includes the base color) is now the first layer.
+        
+        // Draw Grass Texture (Base layer for the field)
         if (imgGrassTexture != null) {
             g.drawImage(imgGrassTexture, 0, 0, null);
         }
@@ -565,18 +573,24 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
              }
         }
 
+        // Yard lines and Endzones are drawn AFTER the grass texture.
         for (int i = 0; i < VIEW_W; i++) {
             int gridX = cameraX + i;
             int drawX = i * TILE_SIZE;
             
             // Yard lines for the green field area (Indices 2 through 41)
             if (gridX >= FIELD_START_X && gridX <= FIELD_END_X - 1) {
-                // Change #4: Set color to white and draw a 2-pixel thick line
+                // 2-pixel thick, translucent white line
                 g.setColor(new Color(255, 255, 255, 100)); 
                 g.fillRect(drawX, 0, 2, WINDOW_H);
             }
-            
-            // Endzones (Left: 0-1, Right: 42-43)
+        }
+        
+        // Endzones are drawn LAST to fully cover the texture/yardlines in that 2-tile area
+        for (int i = 0; i < VIEW_W; i++) {
+            int gridX = cameraX + i;
+            int drawX = i * TILE_SIZE;
+
             if (gridX < FIELD_START_X) { // Left Endzone (Indices 0, 1)
                 drawEndzoneSlice(g, imgEndzoneLeft, gridX, drawX, Color.BLUE);
             }
@@ -606,7 +620,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void drawSidelines(Graphics g) {
-        // Using the SIDELINE_COLOR constant for clean code (Fix from previous step)
+        // Using the SIDELINE_COLOR constant for clean code
         g.setColor(SIDELINE_COLOR);
         g.fillRect(0, 0, VIEW_W * TILE_SIZE, 3);
         g.fillRect(0, WINDOW_H - 3, VIEW_W * TILE_SIZE, 3);
