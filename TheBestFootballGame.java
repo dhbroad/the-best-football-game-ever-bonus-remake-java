@@ -147,16 +147,22 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         g.setColor(FIELD_COLOR);
         g.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
         
-        // Darker green for smudges (subtle noise)
-        Color darkerGreen = new Color(FIELD_COLOR.getRed() - 5, FIELD_COLOR.getGreen() - 5, FIELD_COLOR.getBlue() - 5, 80); 
+        // --- FIX APPLIED HERE: Clamp RGB values to prevent IllegalArgumentException ---
+        int darkR = Math.max(0, FIELD_COLOR.getRed() - 5);
+        int darkG = Math.max(0, FIELD_COLOR.getGreen() - 5);
+        int darkB = Math.max(0, FIELD_COLOR.getBlue() - 5);
+        
+        Color darkerGreen = new Color(darkR, darkG, darkB, 80); 
+        // --------------------------------------------------------------------------
+        
         Random r = new Random();
         
         // Apply subtle noise/smudges for texture
-        for(int x = 0; x < TILE_SIZE; x+=2) { // Iterate with steps for sparse smudges
+        for(int x = 0; x < TILE_SIZE; x+=2) { 
             for(int y = 0; y < TILE_SIZE; y+=2) {
-                if(r.nextDouble() < 0.2) { // 20% chance for a smudge
+                if(r.nextDouble() < 0.2) { 
                     g.setColor(darkerGreen);
-                    int smudgeSize = r.nextInt(3) + 1; // Small smudges 1-3 pixels
+                    int smudgeSize = r.nextInt(3) + 1; 
                     g.fillRect(x, y, smudgeSize, smudgeSize);
                 }
             }
@@ -619,7 +625,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // Time Left - Slightly Down (75)
         drawCenteredText(g, String.valueOf(timeRemaining), x + SCOREBOARD_W/2, 75);
         
-        // Score - Shifted UP 2 pixels (140 -> 138)
+        // Score - Shifted UP 2 pixels (138)
         drawCenteredText(g, String.valueOf(score), x + SCOREBOARD_W/2, 138);
         
         // Yards to go: Distance from goal line (FIELD_START_X = 2) * 2.5
