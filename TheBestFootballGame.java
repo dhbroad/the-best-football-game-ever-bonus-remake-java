@@ -183,7 +183,6 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             imgDefenderRight = loadImage("TBFGE - Defender Facing Right.png");
             imgDefenderKnocked = loadImage("TBFGE - Defender Knocked Down.png");
             
-            // Updated Name
             imgPlayerTackled = loadImage("TBFGE - Player Tackled.png"); 
             imgTackleFlash = loadImage("TBFGE - Tackle Flash.png");
             
@@ -450,7 +449,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     private void playerTackled(Defender tackler) {
         playSound(clipThud);
         gameState = GameState.TACKLED;
-        // Store tackler location for centering the flash
+        // Store the location of the defender involved for the Flash calculation
         tackleSource = new Point(tackler.x, tackler.y); 
         
         defenderTimer.stop(); gameClock.stop();
@@ -501,20 +500,23 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
     }
 
     private void drawStartScreen(Graphics g) {
+        // Start Background Color: 1, 128, 1
         g.setColor(new Color(1, 128, 1)); 
         g.fillRect(0, 0, WINDOW_W, WINDOW_H);
         
+        // Circle Color: 1, 96, 1
         g.setColor(new Color(1, 96, 1)); 
         
-        // 1.5 grid spaces margin = 1.5 * 48 = 72px margin
-        // Height = 336. Circle = 336 - 72 - 72 = 192.
-        int circleSize = 192;
+        // Reverting to the larger size as requested
+        int circleSize = 280;
         g.fillOval(WINDOW_W/2 - circleSize/2, WINDOW_H/2 - circleSize/2, circleSize, circleSize);
         
         g.setColor(Color.WHITE); 
+        // Increased font size for larger circle fit
         g.setFont(new Font("Arial", Font.BOLD, 22));
         String msg = "Click here to start!";
         FontMetrics fm = g.getFontMetrics();
+        // Center visually
         g.drawString(msg, WINDOW_W/2 - fm.stringWidth(msg)/2, WINDOW_H/2 + 8);
     }
 
@@ -576,6 +578,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
 
         // 2. Player (or Tackled Sprite)
         if (gameState == GameState.TACKLED && imgPlayerTackled != null) {
+            // Draw the Tackled Player Sprite (replaces normal player)
             drawSprite(g, imgPlayerTackled, player.x, player.y, offX, offY, false);
         } else {
             BufferedImage sprite = imgPlayerStandLeft;
@@ -600,14 +603,14 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             int dY = (tackleSource.y * TILE_SIZE) + offY;
             
             // Calculate Center of the space between the two tiles
-            // CenterP = pX + T/2. CenterD = dX + T/2.
-            // Mid = (pX + dX + T) / 2
             int midX = (pX + dX + TILE_SIZE) / 2;
             int midY = (pY + dY + TILE_SIZE) / 2;
             
+            // Reduced Vertical Size: 2x Grid Width, 1x Grid Height
             int flashW = TILE_SIZE * 2; // 96px
             int flashH = TILE_SIZE;     // 48px
             
+            // Draw centered
             g.drawImage(imgTackleFlash, midX - flashW/2, midY - flashH/2, flashW, flashH, null);
         }
     }
