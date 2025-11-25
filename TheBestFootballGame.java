@@ -185,8 +185,8 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
             imgDefenderRight = loadImage("TBFGE - Defender Facing Right.png");
             imgDefenderKnocked = loadImage("TBFGE - Defender Knocked Down.png");
             
-            // Updated Names
-            imgPlayerTackled = loadImage("TBFGE Player Tackled.png"); 
+            // Updated Name based on request
+            imgPlayerTackled = loadImage("TBFGE - Player Tackled.png"); 
             imgTackleFlash = loadImage("TBFGE - Tackle Flash.png");
             
             imgRefRight = loadImage("TBFGE - Referee Facing Right.png");
@@ -510,14 +510,13 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
         // Circle Color: 1, 96, 1
         g.setColor(new Color(1, 96, 1)); 
         
-        // Circle Size Calculation
-        // 1.5 Grid Spaces = 72px. Top/Bottom margin = 72.
-        // Height 336 - (72*2) = 192 diameter.
-        int circleSize = 192;
+        // Size increased significantly based on request (leaving approx 0.5 grid margin)
+        // WINDOW_H = 336. Margin = 24. Size = 336 - 48 = 288. Let's use 280.
+        int circleSize = 280;
         g.fillOval(WINDOW_W/2 - circleSize/2, WINDOW_H/2 - circleSize/2, circleSize, circleSize);
         
         g.setColor(Color.WHITE); 
-        // Increased font size for circle fit
+        // Increased font size for larger circle fit
         g.setFont(new Font("Arial", Font.BOLD, 22));
         String msg = "Click here to start!";
         FontMetrics fm = g.getFontMetrics();
@@ -591,15 +590,13 @@ public class TheBestFootballGame extends JPanel implements KeyListener, MouseLis
                 int dX = (tackleSource.x * TILE_SIZE) + offX;
                 int dY = (tackleSource.y * TILE_SIZE) + offY;
                 
-                // Average Position
-                int flashX = (pX + dX) / 2;
-                int flashY = (pY + dY) / 2;
+                // Midpoint for centering the flash
+                int midX = (pX + dX) / 2;
+                int midY = (pY + dY) / 2;
                 
-                // If off screen, clamp? No, standard drawing handles clipping.
-                // Just ensure we draw it relative to view.
-                // But wait, the drawSprite logic relies on Grid Coordinates.
-                // We need pixel drawing here for "in between".
-                g.drawImage(imgTackleFlash, flashX, flashY, TILE_SIZE, TILE_SIZE, null);
+                // Draw flash at 2x size, centered on midpoint
+                int flashSize = TILE_SIZE * 2;
+                g.drawImage(imgTackleFlash, midX - TILE_SIZE, midY - TILE_SIZE, flashSize, flashSize, null);
             }
         } else {
             BufferedImage sprite = imgPlayerStandLeft;
