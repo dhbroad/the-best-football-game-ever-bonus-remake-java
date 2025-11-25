@@ -5,16 +5,15 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Random;
 
-// Main Class
 public class TheBestFootballGame extends JPanel implements KeyListener {
 
     // --- Constants ---
-    private static final int TILE_SIZE = 40; 
-    private static final int GRID_W = 22;    
+    private static final int TILE_SIZE = 30; // Slightly smaller to fit 42 units on screen
+    private static final int GRID_W = 42;    // 0=Endzone, 1-40=Field, 41=Endzone
     private static final int GRID_H = 7;     
     private static final int PANEL_W = GRID_W * TILE_SIZE;
     private static final int PANEL_H = GRID_H * TILE_SIZE;
-    private static final int TURN_DELAY = 500; 
+    private static final int TURN_DELAY = 500; // 0.5 seconds
     
     // --- State ---
     private boolean isRunning = false;
@@ -33,64 +32,114 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
     
     // Assets
     private BufferedImage imgPlayer, imgDefender, imgReferee, imgKnockedDefender;
+    private BufferedImage imgGrass, imgEndzoneLeft, imgEndzoneRight;
     
-    // --- Constructor ---
     public TheBestFootballGame() {
+        // Adjust window size to fit the wide field
         setPreferredSize(new Dimension(PANEL_W, PANEL_H));
-        setBackground(new Color(34, 139, 34)); 
         setFocusable(true);
-        addKeyListener(this); // connects the keyboard
+        addKeyListener(this);
         
+        // Generate detailed assets
         generateAssets();
         
-        // Timer for defender movement (0.5s tick)
-        defenderTimer = new Timer(TURN_DELAY, new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                tickDefenders();
-            }
-        });
+        // Defender Timer
+        defenderTimer = new Timer(TURN_DELAY, e -> tickDefenders());
         
         initGame();
     }
     
-    // --- Asset Generation ---
+    // --- Procedural Asset Generation (Matches Video Style) ---
     private void generateAssets() {
-        // Player (Blue)
-        imgPlayer = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = imgPlayer.createGraphics();
-        g.setColor(Color.BLUE);
-        g.fillOval(5, 5, TILE_SIZE-10, TILE_SIZE-10);
-        g.setColor(Color.WHITE); 
-        g.fillRect(18, 5, 4, TILE_SIZE-10); 
-        g.dispose();
+        // 1. Textured Grass (Noise)
+        imgGrass = new BufferedImage(PANEL_W, PANEL_H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D gBg = imgGrass.createGraphics();
+        gBg.setColor(new Color(34, 139, 34)); // Base Green
+        gBg.fillRect(0, 0, PANEL_W, PANEL_H);
+        Random r = new Random();
+        for(int i=0; i<PANEL_W * PANEL_H / 2; i++) {
+            int noise = r.nextInt(20);
+            gBg.setColor(new Color(34 + noise, 139 + noise, 34 + noise)); // Slight variation
+            gBg.fillRect(r.nextInt(PANEL_W), r.nextInt(PANEL_H), 2, 2);
+        }
+        gBg.dispose();
 
-        // Defender (Red Block)
-        imgDefender = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
-        g = imgDefender.createGraphics();
-        g.setColor(new Color(200, 0, 0)); 
-        g.fillRect(5, 5, TILE_SIZE-10, TILE_SIZE-10);
-        g.setColor(Color.BLACK); 
-        g.fillRect(4, 10, TILE_SIZE-8, 6);
-        g.dispose();
+        // 2. Endzones (Checkered Pattern)
+        imgEndzoneLeft = createEndzoneTexture(Color.BLUE);
+        imgEndzoneRight = createEndzoneTexture(Color.RED);
 
-        // Knocked Defender (Squashed)
+        // 3. Player (Blue Jersey, Gold Helmet, White Pants)
+        imgPlayer = createHumanSprite(new Color(0, 0, 200), new Color(255, 215, 0));
+
+        // 4. Defender (Red Jersey, Red Helmet, White Pants)
+        imgDefender = createHumanSprite(new Color(200, 0, 0), new Color(200, 0, 0));
+
+        // 5. Referee (Black/White Stripes)
+        imgReferee = createRefereeSprite();
+
+        // 6. Knocked Defender (Flattened)
         imgKnockedDefender = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
-        g = imgKnockedDefender.createGraphics();
-        g.setColor(new Color(100, 0, 0)); 
-        g.fillRect(5, 15, TILE_SIZE-10, 10); 
+        Graphics2D g = imgKnockedDefender.createGraphics();
+        g.setColor(new Color(150, 0, 0));
+        g.fillOval(5, 10, TILE_SIZE-10, 10); // Squashed blob
         g.dispose();
+    }
 
-        // Referee (Stripes)
-        imgReferee = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
-        g = imgReferee.createGraphics();
-        g.setColor(Color.WHITE);
-        g.fillRect(5, 5, TILE_SIZE-10, TILE_SIZE-10);
-        g.setColor(Color.BLACK);
-        for(int i=5; i<35; i+=6) {
-            g.fillRect(i, 5, 3, TILE_SIZE-10); 
+    private BufferedImage createEndzoneTexture(Color c) {
+        BufferedImage img = new BufferedImage(TILE_SIZE, PANEL_H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(c);
+        g.fillRect(0, 0, TILE_SIZE, PANEL_H);
+        g.setColor(new Color(255,255,255, 50)); // Semi-transparent checks
+        for(int y=0; y<PANEL_H; y+=10) {
+            if((y/10)%2==0) g.fillRect(0, y, TILE_SIZE/2, 10);
+            else g.fillRect(TILE_SIZE/2, y, TILE_SIZE/2, 10);
         }
         g.dispose();
+        return img;
+    }
+
+    private BufferedImage createHumanSprite(Color jersey, Color helmet) {
+        BufferedImage img = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        // Pants (White)
+        g.setColor(Color.WHITE);
+        g.fillRect(10, 20, 4, 8); // Left leg
+        g.fillRect(16, 20, 4, 8); // Right leg
+        // Jersey (Body)
+        g.setColor(jersey);
+        g.fillRect(6, 10, 18, 10); // Torso
+        g.fillOval(4, 10, 6, 6);   // Left Shoulder
+        g.fillOval(20, 10, 6, 6);  // Right Shoulder
+        // Helmet (Head)
+        g.setColor(helmet);
+        g.fillOval(8, 2, 14, 12);
+        g.dispose();
+        return img;
+    }
+
+    private BufferedImage createRefereeSprite() {
+        BufferedImage img = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        // Pants (Black)
+        g.setColor(Color.BLACK);
+        g.fillRect(10, 20, 4, 8);
+        g.fillRect(16, 20, 4, 8);
+        // Shirt (White)
+        g.setColor(Color.WHITE);
+        g.fillRect(6, 10, 18, 10);
+        // Stripes (Black)
+        g.setColor(Color.BLACK);
+        g.fillRect(9, 10, 2, 10);
+        g.fillRect(14, 10, 2, 10);
+        g.fillRect(19, 10, 2, 10);
+        // Head
+        g.setColor(new Color(255, 220, 177)); // Skin tone
+        g.fillOval(10, 4, 10, 10);
+        g.setColor(Color.WHITE); // Hat
+        g.fillRect(9, 2, 12, 4);
+        g.dispose();
+        return img;
     }
 
     // --- Game Logic ---
@@ -104,18 +153,19 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
         isRunning = true;
         isGameOver = false;
         
-        // Reset Player to left side
+        // Reset Player (Left Field Boundary)
         player = new Player(1, 3); 
         
         defenders = new ArrayList<>();
         referees = new ArrayList<>();
         
-        int defenderCount = 5 + (level * 3);
+        // Difficulty Calculation
+        int defenderCount = 5 + (level * 2);
         int refereeCount = Math.max(1, defenderCount / 15);
         
         Random rand = new Random();
         
-        // Spawn Defenders
+        // Spawn Defenders (Randomly on field 5-40)
         for (int i = 0; i < defenderCount; i++) {
             int dx, dy;
             do {
@@ -151,62 +201,50 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
         return false;
     }
     
-    // --- The "Tick" (Defender Movement) ---
+    // --- AI Turn ---
     private void tickDefenders() {
         if (!isRunning || isGameOver) return;
-        
-        // Wait 0.5s at start of level
         if (System.currentTimeMillis() - gameStartTime < 500) return;
 
         Random rand = new Random();
 
-        // Move Defenders
         for (Defender d : defenders) {
             if (d.isKnockedDown) continue; 
 
-            int dx = 0; 
-            int dy = 0;
+            // 50% Chance to stay still
+            if (rand.nextDouble() < 0.5) continue;
 
-            // AI Logic
-            if (rand.nextDouble() < 0.6) {
-                if (player.x < d.x) dx = -1;
-                else if (player.x > d.x) dx = 1;
-                
-                if (player.y < d.y) dy = -1;
-                else if (player.y > d.y) dy = 1;
-                
-                if (dx != 0 && dy != 0) {
-                    if (rand.nextBoolean()) dx = 0; else dy = 0;
-                }
-            } else if (rand.nextDouble() < 0.5) {
-                if (rand.nextBoolean()) dx = rand.nextBoolean() ? 1 : -1;
-                else dy = rand.nextBoolean() ? 1 : -1;
-            }
+            // Random Cardinal Move
+            int dx = 0, dy = 0;
+            if (rand.nextBoolean()) dx = rand.nextBoolean() ? 1 : -1;
+            else dy = rand.nextBoolean() ? 1 : -1;
 
             int targetX = d.x + dx;
             int targetY = d.y + dy;
 
+            // Bounds Check
             if (targetX < 0 || targetX >= GRID_W || targetY < 0 || targetY >= GRID_H) continue;
 
+            // Collision Check
             if (!isOccupied(targetX, targetY)) {
                 d.x = targetX;
                 d.y = targetY;
             }
             
-            // Check Tackle
+            // TACKLE CHECK: If defender moves into player's square
             if (d.x == player.x && d.y == player.y) {
                 gameOver();
                 return;
             }
         }
         
-        // Move Referees
+        // Move Referees (Lower chance to move)
         for (Referee r : referees) {
+            if (rand.nextDouble() > 0.3) continue; // 70% stay
+            
             int rx = 0, ry = 0;
-            if (rand.nextDouble() < 0.7) { 
-                if (rand.nextBoolean()) rx = rand.nextBoolean() ? 1 : -1;
-                else ry = rand.nextBoolean() ? 1 : -1;
-            }
+            if (rand.nextBoolean()) rx = rand.nextBoolean() ? 1 : -1;
+            else ry = rand.nextBoolean() ? 1 : -1;
             
             int tx = r.x + rx;
             int ty = r.y + ry;
@@ -221,7 +259,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
         repaint();
     }
 
-    // --- Keyboard Input (KeyListener Implementation) ---
+    // --- Player Input ---
     @Override
     public void keyPressed(KeyEvent e) {
         if (!isRunning) {
@@ -232,9 +270,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
             return;
         }
 
-        int dx = 0;
-        int dy = 0;
-
+        int dx = 0, dy = 0;
         switch (e.getKeyCode()) {
             case KeyEvent.VK_UP: dy = -1; break;
             case KeyEvent.VK_DOWN: dy = 1; break;
@@ -242,22 +278,9 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
             case KeyEvent.VK_RIGHT: dx = 1; break;
         }
 
-        if (dx != 0 || dy != 0) {
-            movePlayer(dx, dy);
-        }
+        if (dx != 0 || dy != 0) movePlayer(dx, dy);
     }
 
-    @Override
-    public void keyReleased(KeyEvent e) { 
-        // Mandatory method for KeyListener, can be empty
-    }
-
-    @Override
-    public void keyTyped(KeyEvent e) { 
-        // Mandatory method for KeyListener, can be empty
-    }
-
-    // --- Player Movement Logic ---
     private void movePlayer(int dx, int dy) {
         int targetX = player.x + dx;
         int targetY = player.y + dy;
@@ -269,7 +292,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
             if (r.x == targetX && r.y == targetY) return; 
         }
 
-        // 2. Check Defender
+        // 2. Check Defender (Collision or Knockdown)
         Defender defenderAtTarget = null;
         for (Defender d : defenders) {
             if (!d.isKnockedDown && d.x == targetX && d.y == targetY) {
@@ -279,17 +302,13 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
         }
 
         if (defenderAtTarget != null) {
-            // Knockdown Logic
+            // Knockdown Rule: Must have space behind
             int behindX = targetX + dx;
             int behindY = targetY + dy;
             
             boolean canKnockDown = true;
-            
-            if (behindX < 0 || behindX >= GRID_W || behindY < 0 || behindY >= GRID_H) {
-                canKnockDown = false; 
-            } else if (isOccupied(behindX, behindY)) {
-                canKnockDown = false;
-            }
+            if (behindX < 0 || behindX >= GRID_W || behindY < 0 || behindY >= GRID_H) canKnockDown = false; 
+            else if (isOccupied(behindX, behindY)) canKnockDown = false;
 
             if (canKnockDown) {
                 defenderAtTarget.isKnockedDown = true;
@@ -303,7 +322,7 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
             player.y = targetY;
         }
 
-        // Score
+        // Scoring (Right Endzone is index 41)
         if (player.x == GRID_W - 1) {
             score++;
             level++;
@@ -325,37 +344,35 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // Draw Turf
-        g.setColor(new Color(34, 139, 34)); 
-        g.fillRect(TILE_SIZE, 0, PANEL_W - (2 * TILE_SIZE), PANEL_H);
+        // Draw Textured Grass
+        g.drawImage(imgGrass, 0, 0, null);
 
         // Draw Endzones
-        g.setColor(new Color(200, 200, 200)); 
-        g.fillRect(0, 0, TILE_SIZE, PANEL_H); 
-        g.fillRect(PANEL_W - TILE_SIZE, 0, TILE_SIZE, PANEL_H); 
+        g.drawImage(imgEndzoneLeft, 0, 0, null);
+        g.drawImage(imgEndzoneRight, PANEL_W - TILE_SIZE, 0, null);
         
-        // Draw Grid Lines
-        g.setColor(new Color(0, 0, 0, 50));
-        for (int i=0; i<=GRID_W; i++) g.drawLine(i*TILE_SIZE, 0, i*TILE_SIZE, PANEL_H);
-        for (int i=0; i<=GRID_H; i++) g.drawLine(0, i*TILE_SIZE, PANEL_W, i*TILE_SIZE);
-
-        if (player == null) return;
-
-        // Draw Knocked Defenders
-        for (Defender d : defenders) {
-            if (d.isKnockedDown) {
-                g.drawImage(imgKnockedDefender, d.x * TILE_SIZE, d.y * TILE_SIZE, null);
+        // Draw Field Lines (White yard lines every 5 units)
+        g.setColor(new Color(255, 255, 255, 150));
+        for (int i = 1; i < GRID_W - 1; i++) {
+            if (i % 5 == 0) { // Every 5 yards
+                g.fillRect(i * TILE_SIZE - 1, 0, 3, PANEL_H);
             }
         }
 
-        // Draw Player
+        if (player == null) return;
+
+        // Draw Entities (Layered)
+        // 1. Knocked Defenders
+        for (Defender d : defenders) {
+            if (d.isKnockedDown) g.drawImage(imgKnockedDefender, d.x * TILE_SIZE, d.y * TILE_SIZE, null);
+        }
+
+        // 2. Player
         g.drawImage(imgPlayer, player.x * TILE_SIZE, player.y * TILE_SIZE, null);
 
-        // Draw Defenders & Refs
+        // 3. Active Defenders & Refs
         for (Defender d : defenders) {
-            if (!d.isKnockedDown) {
-                g.drawImage(imgDefender, d.x * TILE_SIZE, d.y * TILE_SIZE, null);
-            }
+            if (!d.isKnockedDown) g.drawImage(imgDefender, d.x * TILE_SIZE, d.y * TILE_SIZE, null);
         }
         for (Referee r : referees) {
             g.drawImage(imgReferee, r.x * TILE_SIZE, r.y * TILE_SIZE, null);
@@ -363,28 +380,26 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
         
         // UI
         g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 20));
-        g.drawString("Score: " + score, 20, 30);
-        g.drawString("Level: " + level, 150, 30);
+        g.setFont(new Font("SansSerif", Font.BOLD, 18));
+        g.drawString("SCORE: " + score, PANEL_W/2 - 40, 25);
+        g.drawString("LEVEL: " + level, PANEL_W/2 - 40, PANEL_H - 10);
         
         if (isGameOver) {
             g.setColor(new Color(0,0,0,180));
             g.fillRect(0, 0, PANEL_W, PANEL_H);
             g.setColor(Color.RED);
-            g.setFont(new Font("Arial", Font.BOLD, 50));
+            g.setFont(new Font("SansSerif", Font.BOLD, 60));
             String msg = "GAME OVER";
             g.drawString(msg, PANEL_W/2 - g.getFontMetrics().stringWidth(msg)/2, PANEL_H/2);
-            
             g.setColor(Color.WHITE);
-            g.setFont(new Font("Arial", Font.BOLD, 20));
+            g.setFont(new Font("SansSerif", Font.BOLD, 25));
             String sub = "Press SPACE to Restart";
             g.drawString(sub, PANEL_W/2 - g.getFontMetrics().stringWidth(sub)/2, PANEL_H/2 + 50);
         }
     }
 
-    // --- Main Method ---
     public static void main(String[] args) {
-        JFrame frame = new JFrame("The Best Football Game - Grid Remake");
+        JFrame frame = new JFrame("The Best Football Game");
         TheBestFootballGame game = new TheBestFootballGame();
         frame.add(game);
         frame.pack();
@@ -393,22 +408,22 @@ public class TheBestFootballGame extends JPanel implements KeyListener {
         frame.setVisible(true);
     }
 
-    // --- Inner Classes (Entities) ---
-    // These MUST be inside the TheBestFootballGame class brackets
+    // Interfaces
+    public void keyReleased(KeyEvent e) {}
+    public void keyTyped(KeyEvent e) {}
+
+    // Entity Classes
     class Player {
         int x, y;
         Player(int x, int y) { this.x = x; this.y = y; }
     }
-    
     class Defender {
         int x, y;
         boolean isKnockedDown = false;
         Defender(int x, int y) { this.x = x; this.y = y; }
     }
-    
     class Referee {
         int x, y;
         Referee(int x, int y) { this.x = x; this.y = y; }
     }
-
-} // End of class TheBestFootballGame
+}
