@@ -1,252 +1,425 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Random;
 
 public class TheBestFootballGame extends JPanel implements ActionListener, KeyListener {
 
-    // Game Constants
-    private static final int WIDTH = 800;
-    private static final int HEIGHT = 400;
-    private static final int PLAYER_SIZE = 20;
-    private static final int DEFENDER_SIZE = 20;
-    private static final int GAME_DURATION = 60; // Seconds
-
-    // Game State
-    private Timer timer;
+    // --- Constants ---
+    private static final int TILE_SIZE = 40; // Size of one grid square in pixels
+    private static final int GRID_W = 22;    // 22 units long (0=Endzone, 1-20=Field, 21=Endzone)
+    private static final int GRID_H = 7;     // 7 units high
+    private static final int PANEL_W = GRID_W * TILE_SIZE;
+    private static final int PANEL_H = GRID_H * TILE_SIZE;
+    
+    // --- Game Settings ---
+    private static final int TURN_DELAY = 500; // Defenders move every 0.5 seconds (500ms)
+    
+    // --- State ---
     private boolean isRunning = false;
     private boolean isGameOver = false;
     private int score = 0;
-    private int timeRemaining;
     private int level = 1;
-    private Color fieldColor;
-
-    // Entities
-    private Rectangle player;
-    private ArrayList<Rectangle> defenders;
-    private int playerSpeed = 5;
-    private int defenderSpeed = 3;
-
-    // Inputs
-    private boolean up, down, left, right;
-
+    
+    // Timers
+    private Timer defenderTimer; // Handles the 0.5s tick for defenders
+    private long gameStartTime;  // To handle the 0.5s initial delay
+    
+    // Grid & Entities
+    // The grid is logically [x][y]. 
+    // Entities track their own coordinates.
+    private Player player;
+    private ArrayList<Defender> defenders;
+    private ArrayList<Referee> referees;
+    
+    // Assets
+    private BufferedImage imgPlayer, imgDefender, imgReferee, imgKnockedDefender;
+    
     public TheBestFootballGame() {
-        setPreferredSize(new Dimension(WIDTH, HEIGHT));
-        setBackground(Color.BLACK);
+        setPreferredSize(new Dimension(PANEL_W, PANEL_H));
+        setBackground(new Color(34, 139, 34)); // Fallback green
         setFocusable(true);
         addKeyListener(this);
-
-        timer = new Timer(16, this); // ~60 FPS
+        
+        // Generate Assets Programmatically
+        generateAssets();
+        
+        // Defender Timer: Ticks every 0.5s
+        defenderTimer = new Timer(TURN_DELAY, e -> tickDefenders());
+        
         initGame();
     }
+    
+    // --- Asset Generation (Procedural Sprites) ---
+    private void generateAssets() {
+        // Player: Blue Helmet/Jersey
+        imgPlayer = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = imgPlayer.createGraphics();
+        g.setColor(Color.BLUE);
+        g.fillOval(5, 5, TILE_SIZE-10, TILE_SIZE-10);
+        g.setColor(Color.WHITE); // Helmet stripe
+        g.fillRect(18, 5, 4, TILE_SIZE-10); 
+        g.dispose();
 
+        // Defender: Red Blocky Jersey
+        imgDefender = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        g = imgDefender.createGraphics();
+        g.setColor(new Color(200, 0, 0)); // Dark Red
+        g.fillRect(5, 5, TILE_SIZE-10, TILE_SIZE-10);
+        g.setColor(Color.BLACK); // Pads
+        g.fillRect(4, 10, TILE_SIZE-8, 6);
+        g.dispose();
+
+        // Knocked Defender: Flattened/Darker
+        imgKnockedDefender = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        g = imgKnockedDefender.createGraphics();
+        g.setColor(new Color(100, 0, 0)); // Darker Red
+        g.fillRect(5, 15, TILE_SIZE-10, 10); // Squashed
+        g.dispose();
+
+        // Referee: Black/White Stripes
+        imgReferee = new BufferedImage(TILE_SIZE, TILE_SIZE, BufferedImage.TYPE_INT_ARGB);
+        g = imgReferee.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(5, 5, TILE_SIZE-10, TILE_SIZE-10);
+        g.setColor(Color.BLACK);
+        for(int i=5; i<35; i+=6) {
+            g.fillRect(i, 5, 3, TILE_SIZE-10); // Stripes
+        }
+        g.dispose();
+    }
+
+    // --- Game Logic ---
+    
     private void initGame() {
         score = 0;
         level = 1;
-        timeRemaining = GAME_DURATION * 60; // frames
-        isRunning = false;
+        startLevel();
+    }
+    
+    private void startLevel() {
+        isRunning = true;
         isGameOver = false;
-        fieldColor = new Color(34, 139, 34); // Classic Green
-        resetField();
-    }
-
-    private void resetField() {
-        // Start player on the left
-        player = new Rectangle(50, HEIGHT / 2 - PLAYER_SIZE / 2, PLAYER_SIZE, PLAYER_SIZE);
         
-        // Spawn defenders based on level
+        // Reset Player (Start at Left Endzone/Field boundary)
+        player = new Player(1, 3); // x=1, y=3 (Center-Left)
+        
+        // Spawn Defenders & Refs based on Level
         defenders = new ArrayList<>();
+        referees = new ArrayList<>();
+        
+        // Difficulty scaling
+        int defenderCount = 5 + (level * 3);
+        int refereeCount = Math.max(1, defenderCount / 15);
+        
         Random rand = new Random();
-        int defenderCount = 3 + (level * 2); // Increase difficulty
-
+        
+        // Spawn Defenders
         for (int i = 0; i < defenderCount; i++) {
-            // Defenders spawn on the right half of the field
-            int dx = WIDTH/2 + rand.nextInt(WIDTH/2 - 50);
-            int dy = rand.nextInt(HEIGHT - DEFENDER_SIZE);
-            defenders.add(new Rectangle(dx, dy, DEFENDER_SIZE, DEFENDER_SIZE));
+            int dx, dy;
+            do {
+                dx = 5 + rand.nextInt(GRID_W - 6); // Spawn deeper in field
+                dy = rand.nextInt(GRID_H);
+            } while (isOccupied(dx, dy)); // Don't overlap spawn
+            defenders.add(new Defender(dx, dy));
         }
         
-        // Change field color per level (reference to the "shades of blue" memory, mostly green/blue variants)
-        if (level > 1) {
-             int r = Math.max(0, 34 - (level * 5));
-             int g = Math.max(50, 139 - (level * 10));
-             int b = Math.min(255, 34 + (level * 20));
-             fieldColor = new Color(r, g, b);
-        } else {
-            fieldColor = new Color(34, 139, 34);
+        // Spawn Referees
+        for (int i = 0; i < refereeCount; i++) {
+            int rx, ry;
+            do {
+                rx = 5 + rand.nextInt(GRID_W - 6);
+                ry = rand.nextInt(GRID_H);
+            } while (isOccupied(rx, ry));
+            referees.add(new Referee(rx, ry));
         }
-    }
-
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        if (isRunning && !isGameOver) {
-            update();
-        }
+        
+        gameStartTime = System.currentTimeMillis();
+        defenderTimer.restart();
         repaint();
     }
 
-    private void update() {
-        // 1. Timer
-        timeRemaining--;
-        if (timeRemaining <= 0) {
-            isGameOver = true;
+    // Helper: Check if a coordinate is occupied by any LIVING entity (Defender or Ref)
+    private boolean isOccupied(int x, int y) {
+        if (player != null && player.x == x && player.y == y) return true;
+        for (Defender d : defenders) {
+            if (!d.isKnockedDown && d.x == x && d.y == y) return true;
+        }
+        for (Referee r : referees) {
+            if (r.x == x && r.y == y) return true;
+        }
+        return false;
+    }
+    
+    // Helper: Check if coordinate is occupied specifically by a knocked down defender
+    private boolean isKnockedDefenderAt(int x, int y) {
+        for (Defender d : defenders) {
+            if (d.isKnockedDown && d.x == x && d.y == y) return true;
+        }
+        return false;
+    }
+
+    // --- Defender AI (The Tick) ---
+    private void tickDefenders() {
+        if (!isRunning || isGameOver) return;
+        
+        // Note #3: Start moving after 0.5s delay from game start
+        if (System.currentTimeMillis() - gameStartTime < 500) return;
+
+        Random rand = new Random();
+
+        // Move Defenders
+        for (Defender d : defenders) {
+            if (d.isKnockedDown) continue; // Knocked defenders don't move
+
+            // Simple AI: Move towards player or random
+            int dx = 0; 
+            int dy = 0;
+
+            // 60% chance to track player, 20% random, 20% stay
+            if (rand.nextDouble() < 0.6) {
+                if (player.x < d.x) dx = -1;
+                else if (player.x > d.x) dx = 1;
+                
+                if (player.y < d.y) dy = -1;
+                else if (player.y > d.y) dy = 1;
+                
+                // Choose only one axis to move (Cardinal)
+                if (dx != 0 && dy != 0) {
+                    if (rand.nextBoolean()) dx = 0; else dy = 0;
+                }
+            } else if (rand.nextDouble() < 0.5) {
+                // Random move
+                if (rand.nextBoolean()) dx = rand.nextBoolean() ? 1 : -1;
+                else dy = rand.nextBoolean() ? 1 : -1;
+            }
+            // Else stay (dx=0, dy=0)
+
+            int targetX = d.x + dx;
+            int targetY = d.y + dy;
+
+            // Check Bounds
+            if (targetX < 0 || targetX >= GRID_W || targetY < 0 || targetY >= GRID_H) continue;
+
+            // Check Collision with other mobs (Note #2: Cannot overlap)
+            if (!isOccupied(targetX, targetY)) {
+                d.x = targetX;
+                d.y = targetY;
+            }
+            
+            // Note #5: If defender moves into player space -> TACKLED
+            if (d.x == player.x && d.y == player.y) {
+                gameOver("TACKLED!");
+                return;
+            }
+        }
+        
+        // Move Referees (Same logic, but they don't tackle)
+        for (Referee r : referees) {
+             // Random patrol logic
+            int rx = 0, ry = 0;
+            if (rand.nextDouble() < 0.7) { // Move
+                if (rand.nextBoolean()) rx = rand.nextBoolean() ? 1 : -1;
+                else ry = rand.nextBoolean() ? 1 : -1;
+            }
+            
+            int tx = r.x + rx;
+            int ty = r.y + ry;
+            
+            if (tx >= 0 && tx < GRID_W && ty >= 0 && ty < GRID_H) {
+                 if (!isOccupied(tx, ty)) {
+                     r.x = tx;
+                     r.y = ty;
+                 }
+            }
+        }
+        
+        repaint();
+    }
+
+    // --- Player Input Handling ---
+    @Override
+    public void keyPressed(KeyEvent e) {
+        if (!isRunning) {
+            if (e.getKeyCode() == KeyEvent.VK_SPACE) {
+                if (isGameOver) initGame(); // Restart
+                else startLevel();
+            }
             return;
         }
 
-        // 2. Player Movement
-        if (up && player.y > 0) player.y -= playerSpeed;
-        if (down && player.y < HEIGHT - PLAYER_SIZE) player.y += playerSpeed;
-        if (left && player.x > 0) player.x -= playerSpeed;
-        if (right && player.x < WIDTH - PLAYER_SIZE) player.x += playerSpeed;
+        int dx = 0;
+        int dy = 0;
 
-        // 3. Defender Logic (Simple AI: Patrol + Chase)
-        for (Rectangle defender : defenders) {
-            // Move towards the left (kickoff team running down field)
-            defender.x -= defenderSpeed;
-
-            // Slight tracking of player Y
-            if (defender.y < player.y && Math.random() > 0.8) defender.y++;
-            if (defender.y > player.y && Math.random() > 0.8) defender.y--;
-
-            // Loop defenders to right if they go off screen (simulate continuous field or waves)
-            // Alternatively, for this specific game, they might just clear out. 
-            // We will wrap them to keep difficulty high.
-            if (defender.x < 0) {
-                defender.x = WIDTH + new Random().nextInt(200);
-                defender.y = new Random().nextInt(HEIGHT - DEFENDER_SIZE);
-            }
-
-            // 4. Collision Detection (Tackle)
-            if (player.intersects(defender)) {
-                // Tackled! Reset to start of level (Touchback)
-                resetField(); 
-                // Optional: Penalty time?
-                // timeRemaining -= 60; 
-                break; // Stop processing this frame
-            }
+        switch (e.getKeyCode()) {
+            case KeyEvent.VK_UP: dy = -1; break;
+            case KeyEvent.VK_DOWN: dy = 1; break;
+            case KeyEvent.VK_LEFT: dx = -1; break;
+            case KeyEvent.VK_RIGHT: dx = 1; break;
         }
 
-        // 5. Scoring (Touchdown)
-        if (player.x >= WIDTH - PLAYER_SIZE - 10) {
-            score++;
-            level++;
-            // Bonus time for scoring?
-            // timeRemaining += 100; 
-            resetField();
+        if (dx != 0 || dy != 0) {
+            movePlayer(dx, dy);
         }
     }
 
+    private void movePlayer(int dx, int dy) {
+        int targetX = player.x + dx;
+        int targetY = player.y + dy;
+
+        // Bounds Check
+        if (targetX < 0 || targetX >= GRID_W || targetY < 0 || targetY >= GRID_H) return;
+
+        // Check collisions
+        // 1. Check for Referee (Immovable Object)
+        for (Referee r : referees) {
+            if (r.x == targetX && r.y == targetY) return; // Blocked
+        }
+
+        // 2. Check for Defender
+        Defender defenderAtTarget = null;
+        for (Defender d : defenders) {
+            if (!d.isKnockedDown && d.x == targetX && d.y == targetY) {
+                defenderAtTarget = d;
+                break;
+            }
+        }
+
+        if (defenderAtTarget != null) {
+            // Note #4: Knock down logic
+            // Check grid BEHIND the defender
+            int behindX = targetX + dx;
+            int behindY = targetY + dy;
+            
+            boolean canKnockDown = true;
+            
+            // Is behind out of bounds?
+            if (behindX < 0 || behindX >= GRID_W || behindY < 0 || behindY >= GRID_H) {
+                canKnockDown = false; 
+            } 
+            // Is there another entity behind?
+            else if (isOccupied(behindX, behindY)) {
+                canKnockDown = false;
+            }
+
+            if (canKnockDown) {
+                // KNOCKDOWN!
+                defenderAtTarget.isKnockedDown = true;
+                // Player moves ON TOP of defender
+                player.x = targetX;
+                player.y = targetY;
+            } else {
+                // Blocked (Cannot knock down because someone is behind)
+                return;
+            }
+        } else {
+            // Empty space (or space with already knocked defender), just move
+            player.x = targetX;
+            player.y = targetY;
+        }
+
+        // Check Win Condition (Right Endzone)
+        if (player.x == GRID_W - 1) {
+            score++;
+            level++;
+            startLevel();
+        }
+
+        repaint();
+    }
+
+    private void gameOver(String reason) {
+        isRunning = false;
+        isGameOver = true;
+        defenderTimer.stop();
+        repaint();
+    }
+
+    // --- Rendering ---
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // Draw Field
-        g.setColor(fieldColor);
-        g.fillRect(0, 0, WIDTH, HEIGHT);
+        // Draw Turf (Note #7: Field should not change color)
+        g.setColor(new Color(34, 139, 34)); // Classic Green
+        g.fillRect(TILE_SIZE, 0, PANEL_W - (2 * TILE_SIZE), PANEL_H);
 
         // Draw Endzones
-        g.setColor(Color.WHITE);
-        g.fillRect(0, 0, 40, HEIGHT); // Left Endzone
-        g.fillRect(WIDTH - 40, 0, 40, HEIGHT); // Right Endzone (Goal)
+        g.setColor(new Color(200, 200, 200)); // Greyish/White for endzones
+        g.fillRect(0, 0, TILE_SIZE, PANEL_H); // Left
+        g.fillRect(PANEL_W - TILE_SIZE, 0, TILE_SIZE, PANEL_H); // Right
         
-        // Yard lines
-        for(int i=1; i<10; i++) {
-            g.drawLine(40 + (i * (WIDTH-80)/10), 0, 40 + (i * (WIDTH-80)/10), HEIGHT);
-        }
+        // Draw Grid Lines (Optional, but helps visualization)
+        g.setColor(new Color(0, 0, 0, 50));
+        for (int i=0; i<=GRID_W; i++) g.drawLine(i*TILE_SIZE, 0, i*TILE_SIZE, PANEL_H);
+        for (int i=0; i<=GRID_H; i++) g.drawLine(0, i*TILE_SIZE, PANEL_W, i*TILE_SIZE);
 
-        if (!isRunning) {
-            drawMenu(g);
-            return;
-        }
+        if (player == null) return; // Not initialized
 
-        // Draw Player
-        g.setColor(Color.BLUE);
-        g.fillOval(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
-        g.setColor(Color.WHITE);
-        g.drawOval(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE); // Outline
-
-        // Draw Defenders
-        g.setColor(Color.RED);
-        for (Rectangle defender : defenders) {
-            g.fillRect(defender.x, defender.y, DEFENDER_SIZE, DEFENDER_SIZE);
-        }
-
-        // Draw UI
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 20));
-        g.drawString("SCORE: " + score, 20, 30);
-        g.drawString("TIME: " + (timeRemaining / 60), WIDTH - 120, 30);
-        g.drawString("LEVEL: " + level, WIDTH / 2 - 40, 30);
-
-        if (isGameOver) {
-            g.setColor(new Color(0, 0, 0, 150));
-            g.fillRect(0, 0, WIDTH, HEIGHT);
-            g.setColor(Color.WHITE);
-            g.setFont(new Font("Arial", Font.BOLD, 40));
-            String msg = "GAME OVER";
-            String scoreMsg = "Final Score: " + score;
-            String restartMsg = "Press SPACE to Restart";
-            g.drawString(msg, WIDTH / 2 - g.getFontMetrics().stringWidth(msg) / 2, HEIGHT / 2 - 40);
-            g.drawString(scoreMsg, WIDTH / 2 - g.getFontMetrics().stringWidth(scoreMsg) / 2, HEIGHT / 2 + 10);
-            g.setFont(new Font("Arial", Font.BOLD, 20));
-            g.drawString(restartMsg, WIDTH / 2 - g.getFontMetrics().stringWidth(restartMsg) / 2, HEIGHT / 2 + 50);
-        }
-    }
-
-    private void drawMenu(Graphics g) {
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 36));
-        String title = "THE BEST FOOTBALL GAME";
-        g.drawString(title, WIDTH / 2 - g.getFontMetrics().stringWidth(title) / 2, HEIGHT / 3);
-
-        g.setFont(new Font("Arial", Font.PLAIN, 18));
-        String instr1 = "Use ARROW KEYS to run.";
-        String instr2 = "Avoid RED defenders.";
-        String instr3 = "Reach the RIGHT ENDZONE to score.";
-        String start = "Press SPACE to Start";
-
-        g.drawString(instr1, WIDTH / 2 - g.getFontMetrics().stringWidth(instr1) / 2, HEIGHT / 2);
-        g.drawString(instr2, WIDTH / 2 - g.getFontMetrics().stringWidth(instr2) / 2, HEIGHT / 2 + 30);
-        g.drawString(instr3, WIDTH / 2 - g.getFontMetrics().stringWidth(instr3) / 2, HEIGHT / 2 + 60);
-        
-        g.setColor(Color.YELLOW);
-        g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString(start, WIDTH / 2 - g.getFontMetrics().stringWidth(start) / 2, HEIGHT / 2 + 120);
-    }
-
-    // Input Handling
-    @Override
-    public void keyPressed(KeyEvent e) {
-        int key = e.getKeyCode();
-        if (key == KeyEvent.VK_SPACE) {
-            if (!isRunning || isGameOver) {
-                initGame();
-                isRunning = true;
-                timer.start();
+        // Draw Knocked Defenders (Layer: Bottom)
+        for (Defender d : defenders) {
+            if (d.isKnockedDown) {
+                g.drawImage(imgKnockedDefender, d.x * TILE_SIZE, d.y * TILE_SIZE, null);
             }
         }
-        if (key == KeyEvent.VK_UP) up = true;
-        if (key == KeyEvent.VK_DOWN) down = true;
-        if (key == KeyEvent.VK_LEFT) left = true;
-        if (key == KeyEvent.VK_RIGHT) right = true;
+
+        // Draw Player (Layer: Middle)
+        g.drawImage(imgPlayer, player.x * TILE_SIZE, player.y * TILE_SIZE, null);
+
+        // Draw Active Defenders & Referees (Layer: Top)
+        for (Defender d : defenders) {
+            if (!d.isKnockedDown) {
+                g.drawImage(imgDefender, d.x * TILE_SIZE, d.y * TILE_SIZE, null);
+            }
+        }
+        for (Referee r : referees) {
+            g.drawImage(imgReferee, r.x * TILE_SIZE, r.y * TILE_SIZE, null);
+        }
+        
+        // UI
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Arial", Font.BOLD, 20));
+        g.drawString("Score: " + score, 20, 30);
+        g.drawString("Level: " + level, 150, 30);
+        
+        if (isGameOver) {
+            g.setColor(new Color(0,0,0,180));
+            g.fillRect(0, 0, PANEL_W, PANEL_H);
+            g.setColor(Color.RED);
+            g.setFont(new Font("Arial", Font.BOLD, 50));
+            g.drawString("GAME OVER", PANEL_W/2 - 150, PANEL_H/2);
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("Arial", Font.BOLD, 20));
+            g.drawString("Press SPACE to Restart", PANEL_W/2 - 110, PANEL_H/2 + 50);
+        }
     }
 
-    @Override
-    public void keyReleased(KeyEvent e) {
-        int key = e.getKeyCode();
-        if (key == KeyEvent.VK_UP) up = false;
-        if (key == KeyEvent.VK_DOWN) down = false;
-        if (key == KeyEvent.VK_LEFT) left = false;
-        if (key == KeyEvent.VK_RIGHT) right = false;
+    // --- Entity Classes ---
+    class Player {
+        int x, y;
+        Player(int x, int y) { this.x = x; this.y = y; }
+    }
+    
+    class Defender {
+        int x, y;
+        boolean isKnockedDown = false;
+        Defender(int x, int y) { this.x = x; this.y = y; }
+    }
+    
+    class Referee {
+        int x, y;
+        Referee(int x, int y) { this.x = x; this.y = y; }
     }
 
-    @Override
+    // Unused Interface Methods
+    public void keyReleased(KeyEvent e) {}
     public void keyTyped(KeyEvent e) {}
 
     public static void main(String[] args) {
-        JFrame frame = new JFrame("The Best Football Game (Reproduction)");
+        JFrame frame = new JFrame("The Best Football Game - Grid Remake");
         TheBestFootballGame game = new TheBestFootballGame();
         frame.add(game);
         frame.pack();
