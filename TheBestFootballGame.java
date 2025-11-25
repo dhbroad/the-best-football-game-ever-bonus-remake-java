@@ -3,10 +3,10 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Random;
 
-public class TheBestFootballGame extends JPanel implements ActionListener, KeyListener {
+// Removed "ActionListener" from the implements list
+public class TheBestFootballGame extends JPanel implements KeyListener {
 
     // --- Constants ---
     private static final int TILE_SIZE = 40; // Size of one grid square in pixels
@@ -29,8 +29,6 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
     private long gameStartTime;  // To handle the 0.5s initial delay
     
     // Grid & Entities
-    // The grid is logically [x][y]. 
-    // Entities track their own coordinates.
     private Player player;
     private ArrayList<Defender> defenders;
     private ArrayList<Referee> referees;
@@ -47,7 +45,7 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
         // Generate Assets Programmatically
         generateAssets();
         
-        // Defender Timer: Ticks every 0.5s
+        // Defender Timer: Ticks every 0.5s using a Lambda expression instead of the class instance
         defenderTimer = new Timer(TURN_DELAY, e -> tickDefenders());
         
         initGame();
@@ -154,14 +152,6 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
         return false;
     }
     
-    // Helper: Check if coordinate is occupied specifically by a knocked down defender
-    private boolean isKnockedDefenderAt(int x, int y) {
-        for (Defender d : defenders) {
-            if (d.isKnockedDown && d.x == x && d.y == y) return true;
-        }
-        return false;
-    }
-
     // --- Defender AI (The Tick) ---
     private void tickDefenders() {
         if (!isRunning || isGameOver) return;
@@ -179,7 +169,7 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
             int dx = 0; 
             int dy = 0;
 
-            // 60% chance to track player, 20% random, 20% stay
+            // 60% chance to track player
             if (rand.nextDouble() < 0.6) {
                 if (player.x < d.x) dx = -1;
                 else if (player.x > d.x) dx = 1;
@@ -212,7 +202,7 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
             
             // Note #5: If defender moves into player space -> TACKLED
             if (d.x == player.x && d.y == player.y) {
-                gameOver("TACKLED!");
+                gameOver();
                 return;
             }
         }
@@ -331,7 +321,7 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
         repaint();
     }
 
-    private void gameOver(String reason) {
+    private void gameOver() {
         isRunning = false;
         isGameOver = true;
         defenderTimer.stop();
@@ -343,7 +333,7 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // Draw Turf (Note #7: Field should not change color)
+        // Draw Turf
         g.setColor(new Color(34, 139, 34)); // Classic Green
         g.fillRect(TILE_SIZE, 0, PANEL_W - (2 * TILE_SIZE), PANEL_H);
 
@@ -352,7 +342,7 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
         g.fillRect(0, 0, TILE_SIZE, PANEL_H); // Left
         g.fillRect(PANEL_W - TILE_SIZE, 0, TILE_SIZE, PANEL_H); // Right
         
-        // Draw Grid Lines (Optional, but helps visualization)
+        // Draw Grid Lines
         g.setColor(new Color(0, 0, 0, 50));
         for (int i=0; i<=GRID_W; i++) g.drawLine(i*TILE_SIZE, 0, i*TILE_SIZE, PANEL_H);
         for (int i=0; i<=GRID_H; i++) g.drawLine(0, i*TILE_SIZE, PANEL_W, i*TILE_SIZE);
@@ -390,10 +380,13 @@ public class TheBestFootballGame extends JPanel implements ActionListener, KeyLi
             g.fillRect(0, 0, PANEL_W, PANEL_H);
             g.setColor(Color.RED);
             g.setFont(new Font("Arial", Font.BOLD, 50));
-            g.drawString("GAME OVER", PANEL_W/2 - 150, PANEL_H/2);
+            String msg = "GAME OVER";
+            g.drawString(msg, PANEL_W/2 - g.getFontMetrics().stringWidth(msg)/2, PANEL_H/2);
+            
             g.setColor(Color.WHITE);
             g.setFont(new Font("Arial", Font.BOLD, 20));
-            g.drawString("Press SPACE to Restart", PANEL_W/2 - 110, PANEL_H/2 + 50);
+            String sub = "Press SPACE to Restart";
+            g.drawString(sub, PANEL_W/2 - g.getFontMetrics().stringWidth(sub)/2, PANEL_H/2 + 50);
         }
     }
 
