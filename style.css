@@ -1,0 +1,118 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.container {
+    max-width: 900px;
+    width: 100%;
+}
+
+h1 {
+    text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.game-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+    background: #000;
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+#gameCanvas {
+    display: block;
+    border: 3px solid #fff;
+    border-radius: 5px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.controls, .instructions {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+h2 {
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+    color: #ffd700;
+}
+
+.controls ul {
+    list-style: none;
+}
+
+.controls li {
+    padding: 8px 0;
+    font-size: 1.1rem;
+}
+
+.controls li strong {
+    color: #ffd700;
+    margin-right: 10px;
+}
+
+.instructions p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    #gameCanvas {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .controls li, .instructions p {
+        font-size: 1rem;
+    }
+}
+
+/* Loading animation */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.game-wrapper::before {
+    content: 'Loading...';
+    position: absolute;
+    color: #fff;
+    font-size: 1.5rem;
+    animation: pulse 1.5s infinite;
+}
+
+.game-wrapper:has(canvas)::before {
+    display: none;
+}
