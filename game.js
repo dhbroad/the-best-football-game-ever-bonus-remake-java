@@ -129,6 +129,12 @@ class TheBestFootballGame {
             const img = new Image();
             img.onload = () => {
                 loadedCount++;
+                
+                // Create flipped version of endzone for left side
+                if (filename === 'TBFGE - Endzone Right.png') {
+                    this.createFlippedEndzone(img);
+                }
+                
                 if (loadedCount === totalAssets) {
                     this.generateGrassTexture();
                     this.initGameSession();
@@ -160,6 +166,23 @@ class TheBestFootballGame {
             audio.preload = 'auto';
             this.sounds[key] = audio;
         }
+    }
+    
+    createFlippedEndzone(img) {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        
+        // Flip horizontally
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0);
+        
+        // Store as a new image
+        const flippedImg = new Image();
+        flippedImg.src = canvas.toDataURL();
+        this.images['TBFGE - Endzone Left.png'] = flippedImg;
     }
     
     generateGrassTexture() {
@@ -677,7 +700,8 @@ class TheBestFootballGame {
     
     drawEndzoneSlice(sliceIndex, drawX, drawY, fallbackColor, isLeft) {
         const sliceHeight = TheBestFootballGame.VIEW_H * TheBestFootballGame.TILE_SIZE;
-        const img = this.images['TBFGE - Endzone Right.png'];
+        const imgName = isLeft ? 'TBFGE - Endzone Left.png' : 'TBFGE - Endzone Right.png';
+        const img = this.images[imgName];
         
         if (!img || !img.complete) {
             this.ctx.fillStyle = fallbackColor;
@@ -686,21 +710,10 @@ class TheBestFootballGame {
         }
         
         const srcWidthPerTile = img.width / 2;
-        
-        // For left endzone, reverse the slice index (1 becomes 0, 0 becomes 1)
-        const actualSliceIndex = isLeft ? (1 - sliceIndex) : sliceIndex;
-        const srcX1 = actualSliceIndex * srcWidthPerTile;
+        const srcX1 = sliceIndex * srcWidthPerTile;
         const srcX2 = srcX1 + srcWidthPerTile;
         
-        this.ctx.save();
-        if (isLeft) {
-            this.ctx.translate(drawX + TheBestFootballGame.TILE_SIZE, drawY);
-            this.ctx.scale(-1, 1);
-            this.ctx.drawImage(img, srcX1, 0, srcWidthPerTile, img.height, 0, 0, TheBestFootballGame.TILE_SIZE, sliceHeight);
-        } else {
-            this.ctx.drawImage(img, srcX1, 0, srcWidthPerTile, img.height, drawX, drawY, TheBestFootballGame.TILE_SIZE, sliceHeight);
-        }
-        this.ctx.restore();
+        this.ctx.drawImage(img, srcX1, 0, srcWidthPerTile, img.height, drawX, drawY, TheBestFootballGame.TILE_SIZE, sliceHeight);
     }
     
     drawFirstDownMarker() {
