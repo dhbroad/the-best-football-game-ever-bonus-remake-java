@@ -686,7 +686,10 @@ class TheBestFootballGame {
         }
         
         const srcWidthPerTile = img.width / 2;
-        const srcX1 = sliceIndex * srcWidthPerTile;
+        
+        // For left endzone, reverse the slice index (1 becomes 0, 0 becomes 1)
+        const actualSliceIndex = isLeft ? (1 - sliceIndex) : sliceIndex;
+        const srcX1 = actualSliceIndex * srcWidthPerTile;
         const srcX2 = srcX1 + srcWidthPerTile;
         
         this.ctx.save();
