@@ -468,6 +468,11 @@ class TheBestFootballGame {
     }
     
     handleKeyDown(e) {
+        // Prevent default behavior for arrow keys and space to stop page scrolling
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+            e.preventDefault();
+        }
+        
         if (this.gameState === TheBestFootballGame.GameState.GAMEOVER && e.code === 'Space') {
             this.initGameSession();
             this.startFirstGameSequence();
@@ -485,7 +490,6 @@ class TheBestFootballGame {
             default: return;
         }
         
-        e.preventDefault();
         if (dx !== 0 || dy !== 0) {
             this.keyIsPressed = true;
             this.movePlayer(dx, dy);
