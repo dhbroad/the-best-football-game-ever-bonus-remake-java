@@ -95,9 +95,9 @@ class TheBestFootballGame {
     }
     
     setupEventListeners() {
-        // Keyboard
-        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        window.addEventListener('keyup', (e) => this.handleKeyUp(e));
+        // Keyboard - use passive: false to ensure preventDefault works
+        window.addEventListener('keydown', (e) => this.handleKeyDown(e), { passive: false });
+        window.addEventListener('keyup', (e) => this.handleKeyUp(e), { passive: false });
         
         // Mouse
         this.canvas.addEventListener('click', (e) => this.handleClick(e));
@@ -471,15 +471,16 @@ class TheBestFootballGame {
         // Prevent default behavior for arrow keys and space to stop page scrolling
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
             e.preventDefault();
+            e.stopPropagation();
         }
         
         if (this.gameState === TheBestFootballGame.GameState.GAMEOVER && e.code === 'Space') {
             this.initGameSession();
             this.startFirstGameSequence();
-            return;
+            return false;
         }
         
-        if (this.gameState !== TheBestFootballGame.GameState.PLAYING || this.keyIsPressed) return;
+        if (this.gameState !== TheBestFootballGame.GameState.PLAYING || this.keyIsPressed) return false;
         
         let dx = 0, dy = 0;
         switch (e.code) {
@@ -487,17 +488,23 @@ class TheBestFootballGame {
             case 'ArrowDown': dy = 1; break;
             case 'ArrowLeft': dx = -1; break;
             case 'ArrowRight': dx = 1; break;
-            default: return;
+            default: return true;
         }
         
         if (dx !== 0 || dy !== 0) {
             this.keyIsPressed = true;
             this.movePlayer(dx, dy);
         }
+        return false;
     }
     
     handleKeyUp(e) {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         this.keyIsPressed = false;
+        return false;
     }
     
     handleClick(e) {
