@@ -179,10 +179,8 @@ class TheBestFootballGame {
         ctx.scale(-1, 1);
         ctx.drawImage(img, 0, 0);
         
-        // Store as a new image
-        const flippedImg = new Image();
-        flippedImg.src = canvas.toDataURL();
-        this.images['TBFGE - Endzone Left.png'] = flippedImg;
+        // Store canvas directly - drawImage can use Canvas as source
+        this.images['TBFGE - Endzone Left.png'] = canvas;
     }
     
     generateGrassTexture() {
@@ -714,7 +712,8 @@ class TheBestFootballGame {
         const imgName = isLeft ? 'TBFGE - Endzone Left.png' : 'TBFGE - Endzone Right.png';
         const img = this.images[imgName];
         
-        if (!img || !img.complete) {
+        // Check if image exists and has valid dimensions (works for both Image and Canvas)
+        if (!img || !img.width || img.width === 0) {
             this.ctx.fillStyle = fallbackColor;
             this.ctx.fillRect(drawX, drawY, TheBestFootballGame.TILE_SIZE, sliceHeight);
             return;
@@ -922,10 +921,241 @@ class Referee {
     }
 }
 
+// Leaderboard Manager
+class LeaderboardManager {
+    constructor(workerUrl) {
+        this.workerUrl = workerUrl;
+        this.allScores = [];
+        
+        this.setupEventListeners();
+        this.loadLeaderboard();
+    }
+    
+    setupEventListeners() {
+        const viewAllBtn = document.getElementById('view-all-btn');
+        const closeAllBtn = document.getElementById('close-all-scores');
+        const modal = document.getElementById('all-scores-modal');
+        
+        if (viewAllBtn) {
+            viewAllBtn.addEventListener('click', () => this.showAllScoresModal());
+        }
+        
+        if (closeAllBtn) {
+            closeAllBtn.addEventListener('click', () => this.hideAllScoresModal());
+        }
+        
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this.hideAllScoresModal();
+                }
+            });
+        }
+    }
+    
+    async loadLeaderboard(limit = 10) {
+        const content = document.getElementById('leaderboard-content');
+        if (!content) return;
+        
+        try {
+            const response = await fetch(`${this.workerUrl}/leaderboard?limit=${limit}`);
+            const data = await response.json();
+            
+            this.allScores = data.scores || [];
+            this.displayScores(this.allScores, content, limit);
+            
+        } catch (error) {
+            content.innerHTML = '<div class="empty-leaderboard">Failed to load leaderboard</div>';
+            console.error('Leaderboard error:', error);
+        }
+    }
+    
+    displayScores(scores, content, limit = 10) {
+        if (!content) return;
+        
+        if (scores.length === 0) {
+            content.innerHTML = '<div class="empty-leaderboard">No scores yet. Be the first!</div>';
+            return;
+        }
+        
+        const displayScores = scores.slice(0, limit);
+        
+        let html = '<table class="leaderboard-table"><thead><tr><th>Rank</th><th>Name</th><th>Score</th></tr></thead><tbody>';
+        
+        displayScores.forEach((entry, index) => {
+            const rank = index + 1;
+            const name = entry.name || '???';
+            const score = entry.score || 0;
+            html += `<tr><td>#${rank}</td><td>${name}</td><td>${score}</td></tr>`;
+        });
+        
+        html += '</tbody></table>';
+        content.innerHTML = html;
+    }
+    
+    async showAllScoresModal() {
+        const modal = document.getElementById('all-scores-modal');
+        const content = document.getElementById('all-scores-content');
+        
+        if (!modal || !content) return;
+        
+        modal.classList.add('show');
+        content.innerHTML = '<div class="loading">Loading all scores...</div>';
+        
+        try {
+            const response = await fetch(`${this.workerUrl}/leaderboard?limit=25`);
+            const data = await response.json();
+            const allScores = data.scores || [];
+            
+            this.displayScores(allScores, content, 25);
+        } catch (error) {
+            content.innerHTML = '<div class="empty-leaderboard">Failed to load scores</div>';
+            console.error('All scores error:', error);
+        }
+    }
+    
+    hideAllScoresModal() {
+        const modal = document.getElementById('all-scores-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
+    }
+    
+    async submitScore(name, score) {
+        try {
+            const response = await fetch(`${this.workerUrl}/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name, score }),
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                await this.loadLeaderboard(10);
+                return { success: true };
+            } else {
+                return { success: false, error: data.error || 'Failed to submit' };
+            }
+        } catch (error) {
+            return { success: false, error: 'Network error' };
+        }
+    }
+}
+
+// Score Submit Modal Handler
+class ScoreModal {
+    constructor(leaderboardManager) {
+        this.leaderboardManager = leaderboardManager;
+        this.modal = document.getElementById('score-modal');
+        this.scoreSpan = document.getElementById('modal-score');
+        this.initialsInput = document.getElementById('initials-input');
+        this.submitBtn = document.getElementById('submit-score-btn');
+        this.skipBtn = document.getElementById('skip-score-btn');
+        this.messageDiv = document.getElementById('submit-message');
+        
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        if (this.submitBtn) {
+            this.submitBtn.addEventListener('click', () => this.handleSubmit());
+        }
+        
+        if (this.skipBtn) {
+            this.skipBtn.addEventListener('click', () => this.hide());
+        }
+        
+        if (this.initialsInput) {
+            this.initialsInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.handleSubmit();
+                }
+            });
+            
+            // Only allow letters and numbers
+            this.initialsInput.addEventListener('input', (e) => {
+                e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            });
+        }
+    }
+    
+    show(score) {
+        if (!this.modal) return;
+        
+        this.currentScore = score;
+        if (this.scoreSpan) this.scoreSpan.textContent = score;
+        if (this.initialsInput) {
+            this.initialsInput.value = '';
+            this.initialsInput.focus();
+        }
+        if (this.messageDiv) this.messageDiv.textContent = '';
+        
+        this.modal.classList.add('show');
+    }
+    
+    hide() {
+        if (this.modal) {
+            this.modal.classList.remove('show');
+        }
+    }
+    
+    async handleSubmit() {
+        const initials = this.initialsInput ? this.initialsInput.value.trim() : '';
+        
+        if (initials.length === 0) {
+            this.showMessage('Please enter your initials', 'error');
+            return;
+        }
+        
+        if (initials.length > 3) {
+            this.showMessage('Maximum 3 characters', 'error');
+            return;
+        }
+        
+        // Disable button during submission
+        if (this.submitBtn) this.submitBtn.disabled = true;
+        this.showMessage('Submitting...', '');
+        
+        const result = await this.leaderboardManager.submitScore(initials, this.currentScore);
+        
+        if (result.success) {
+            this.showMessage('Score submitted! 🎉', 'success');
+            setTimeout(() => this.hide(), 2000);
+        } else {
+            this.showMessage(result.error || 'Failed to submit', 'error');
+            if (this.submitBtn) this.submitBtn.disabled = false;
+        }
+    }
+    
+    showMessage(text, type) {
+        if (!this.messageDiv) return;
+        
+        this.messageDiv.textContent = text;
+        this.messageDiv.className = 'submit-message';
+        if (type) this.messageDiv.classList.add(type);
+    }
+}
+
 // Initialize game when page loads
 window.addEventListener('load', () => {
     const canvas = document.getElementById('gameCanvas');
     if (canvas) {
-        new TheBestFootballGame(canvas);
+        // IMPORTANT: Replace this URL with your actual Cloudflare Worker URL
+        const WORKER_URL = 'https://the-best-football-game-ever-remake-leaderboard.dhbroad.workers.dev';
+        
+        const leaderboardManager = new LeaderboardManager(WORKER_URL);
+        const scoreModal = new ScoreModal(leaderboardManager);
+        
+        const game = new TheBestFootballGame(canvas);
+        
+        // Override gameOver to show modal
+        const originalGameOver = game.gameOver.bind(game);
+        game.gameOver = function(msg) {
+            originalGameOver(msg);
+            scoreModal.show(this.score);
+        };
     }
 });

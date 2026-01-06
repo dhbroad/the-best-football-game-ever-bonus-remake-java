@@ -9,8 +9,17 @@
 <body>
     <div class="container">
         <h1>The Best Football Game Ever!</h1>
-        <div class="game-wrapper">
-            <canvas id="gameCanvas"></canvas>
+        <div class="game-layout">
+            <div class="game-wrapper">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+            <div class="leaderboard-section">
+                <h2>🏆 Leaderboard</h2>
+                <div id="leaderboard-content">
+                    <div class="loading">Loading scores...</div>
+                </div>
+                <button id="view-all-btn" class="view-all-btn">View All Scores</button>
+            </div>
         </div>
         <div class="controls">
             <h2>Controls</h2>
@@ -25,6 +34,35 @@
             <p>Run towards the left endzone to score touchdowns! Avoid defenders or knock them down by running into them. You have 4 attempts to advance 10 yards for a first down. Score as many points as you can before time runs out!</p>
         </div>
     </div>
+    
+    <!-- All Scores Modal -->
+    <div id="all-scores-modal" class="modal">
+        <div class="modal-content scores-modal-content">
+            <div class="modal-header">
+                <h2>🏆 All High Scores</h2>
+                <button id="close-all-scores" class="close-btn">&times;</button>
+            </div>
+            <div id="all-scores-content">
+                <div class="loading">Loading all scores...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Score Submit Modal -->
+    <div id="score-modal" class="modal">
+        <div class="modal-content">
+            <h2>🎉 Game Over!</h2>
+            <p class="final-score">Your Score: <span id="modal-score">0</span></p>
+            <p class="modal-message">Enter your initials for the leaderboard:</p>
+            <input type="text" id="initials-input" maxlength="3" placeholder="ABC" autocomplete="off">
+            <div class="modal-buttons">
+                <button id="submit-score-btn" class="modal-btn primary">Submit Score</button>
+                <button id="skip-score-btn" class="modal-btn">Skip</button>
+            </div>
+            <div id="submit-message" class="submit-message"></div>
+        </div>
+    </div>
+    
     <script src="game.js"></script>
 </body>
 </html>
