@@ -73,6 +73,7 @@ class TheBestFootballGame {
         
         // Tackle
         this.tackleSource = null;
+        this.stepsSinceKnockdown = 0;
         
         // Entities
         this.player = null;
@@ -239,6 +240,7 @@ class TheBestFootballGame {
         this.attempts = TheBestFootballGame.START_ATTEMPTS;
         this.timeRemaining = TheBestFootballGame.GAME_DURATION;
         this.touchdowns = 0;
+        this.stepsSinceKnockdown = 0;
         this.gameState = TheBestFootballGame.GameState.MENU;
     }
     
@@ -247,6 +249,9 @@ class TheBestFootballGame {
         this.cameraX = TheBestFootballGame.GRID_W - TheBestFootballGame.VIEW_W;
         
         this.spawnDefendersAndRefs();
+        
+        // Spawn 3 defenders in column to the left of player
+        this.spawnInitialDefenders();
         
         // Initial First Down setup
         this.firstDownMarkerX = this.player.x - TheBestFootballGame.FIRST_DOWN_DISTANCE;
@@ -362,9 +367,41 @@ class TheBestFootballGame {
         this.player.facingLeft = true;
         this.player.state = Player.State.STAND;
         
+        // Spawn 3 defenders in front of player
+        this.spawnInitialDefenders();
+        
         this.updateCamera();
         this.gameState = TheBestFootballGame.GameState.READY;
         this.startPlayAfterDelay(3000);
+    }
+    
+    spawnInitialDefenders() {
+        // Spawn 3 defenders in the column to the left of player: middle, above, below
+        const spawnX = this.player.x - 1;
+        const midY = this.player.y;
+        const aboveY = this.player.y - 1;
+        const belowY = this.player.y + 1;
+        
+        const positions = [
+            { x: spawnX, y: midY },
+            { x: spawnX, y: aboveY },
+            { x: spawnX, y: belowY }
+        ];
+        
+        // For each position, remove any existing entities and spawn a defender
+        for (const pos of positions) {
+            // Check if position is within bounds
+            if (pos.y < 0 || pos.y >= TheBestFootballGame.VIEW_H) continue;
+            
+            // Remove any referees at this position
+            this.referees = this.referees.filter(r => !(r.x === pos.x && r.y === pos.y));
+            
+            // Remove any existing defenders at this position
+            this.defenders = this.defenders.filter(d => !(d.x === pos.x && d.y === pos.y));
+            
+            // Spawn new defender
+            this.defenders.push(new Defender(pos.x, pos.y));
+        }
     }
     
     spawnDefendersAndRefs() {
@@ -372,7 +409,8 @@ class TheBestFootballGame {
         this.referees = [];
         
         const fieldRatio = TheBestFootballGame.GRID_W / TheBestFootballGame.VIEW_W;
-        const defendersPerView = Math.min(20, 10 + this.touchdowns * 2);
+        // Max 40 defenders at 8 touchdowns: 10 + (8 * 3.75) = 40
+        const defendersPerView = Math.min(40, 10 + this.touchdowns * 3.75);
         const totalDefenders = Math.round(defendersPerView * fieldRatio);
         
         const minSpawnX = TheBestFootballGame.FIELD_START_X;
@@ -401,7 +439,8 @@ class TheBestFootballGame {
     isOccupied(x, y) {
         if (this.player && this.player.x === x && this.player.y === y) return true;
         for (let d of this.defenders) {
-            if (!d.isKnockedDown && d.x === x && d.y === y) return true;
+            // Check all defenders, including knocked down ones, to prevent overlap
+            if (d.x === x && d.y === y) return true;
         }
         for (let r of this.referees) {
             if (r.x === x && r.y === y) return true;
@@ -546,30 +585,26 @@ class TheBestFootballGame {
         }
         
         if (targetDef) {
-            const bx = tx + dx;
-            const by = ty + dy;
+            // Determine tackle chance based on steps since last knockdown
+            // 1 in 3 (33%) if 3 steps or less, 1 in 5 (20%) if more than 3 steps
+            const tackleChance = this.stepsSinceKnockdown <= 3 ? 0.333 : 0.2;
             
-            let blockerBehind = false;
-            for (let d of this.defenders) {
-                if (d !== targetDef && !d.isKnockedDown && d.x === bx && d.y === by) {
-                    blockerBehind = true;
-                    break;
-                }
-            }
-            
-            if (blockerBehind || bx <= 0 || bx >= TheBestFootballGame.GRID_W - 1 || by < 0 || by >= TheBestFootballGame.VIEW_H) {
+            if (Math.random() < tackleChance) {
                 this.playerTackled(targetDef);
                 return;
             } else {
                 targetDef.isKnockedDown = true;
-                this.score++;
                 this.playSound('thud');
-                this.player.x = tx;
-                this.player.y = ty;
+                // Award 1 point for knocking down a defender
+                this.score += 1;
+                // Reset step counter after knockdown
+                this.stepsSinceKnockdown = 0;
             }
         } else {
             this.player.x = tx;
             this.player.y = ty;
+            // Increment step counter when moving to empty space
+            this.stepsSinceKnockdown++;
         }
         
         this.playSound('step');
@@ -590,6 +625,12 @@ class TheBestFootballGame {
         this.playSound('thud');
         this.gameState = TheBestFootballGame.GameState.TACKLED;
         this.tackleSource = tackler ? { x: tackler.x, y: tackler.y } : null;
+        
+        // Lose 1 point when tackled (minimum 0)
+        this.score = Math.max(0, this.score - 1);
+        
+        // Reset step counter when tackled
+        this.stepsSinceKnockdown = 0;
         
         this.stopAllTimers();
         
@@ -1092,6 +1133,9 @@ class ScoreModal {
             this.initialsInput.focus();
         }
         if (this.messageDiv) this.messageDiv.textContent = '';
+        
+        // Re-enable submit button in case it was disabled from previous submission
+        if (this.submitBtn) this.submitBtn.disabled = false;
         
         this.modal.classList.add('show');
     }
