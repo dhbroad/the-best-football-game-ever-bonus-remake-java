@@ -629,8 +629,8 @@ class TheBestFootballGame {
         // Lose 1 point when tackled (minimum 0)
         this.score = Math.max(0, this.score - 1);
         
-        // Reset step counter when tackled
-        this.stepsSinceKnockdown = 0;
+        // Reset step counter when tackled (set to 4 for normal 20% tackle chance)
+        this.stepsSinceKnockdown = 4;
         
         this.stopAllTimers();
         
