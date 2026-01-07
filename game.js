@@ -73,7 +73,7 @@ class TheBestFootballGame {
         
         // Tackle
         this.tackleSource = null;
-        this.stepsSinceKnockdown = 0;
+        this.stepsSinceKnockdown = 4;
         
         // Entities
         this.player = null;
@@ -240,7 +240,7 @@ class TheBestFootballGame {
         this.attempts = TheBestFootballGame.START_ATTEMPTS;
         this.timeRemaining = TheBestFootballGame.GAME_DURATION;
         this.touchdowns = 0;
-        this.stepsSinceKnockdown = 0;
+        this.stepsSinceKnockdown = 4;
         this.gameState = TheBestFootballGame.GameState.MENU;
     }
     
